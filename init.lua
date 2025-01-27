@@ -249,6 +249,7 @@ local function setup_plugins()
 			"neovim/nvim-lspconfig",
 			dependencies = {
 				"hrsh7th/cmp-nvim-lsp",
+				"ray-x/go.nvim",
 			},
 			config = function()
 				vim.defer_fn(function()
@@ -350,6 +351,64 @@ local function setup_plugins()
 								implementationsCodeLens = true,
 								referencesCodeLens = true,
 								displayPartsForJSDocs = true,
+							},
+						},
+						handlers = {
+							["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
+								border = "rounded",
+								max_width = 80,
+								max_height = 20,
+							}),
+							["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, {
+								border = "rounded",
+								max_width = 80,
+								max_height = 20,
+							}),
+						},
+					})
+
+					lspconfig.gopls.setup({
+						cmd = { vim.fn.expand("$GOPATH") .. "/bin/gopls" },
+						capabilities = capabilities,
+						on_attach = on_attach,
+						on_init = function(client)
+							-- Debug
+							print("Go LSP initialized")
+							print("Go LSP executable path: " .. vim.fn.exepath("gopls"))
+							print("GOPATH: " .. (vim.fn.expand("$GOPATH") or "No path"))
+						end,
+						settings = {
+							gopls = {
+								analyses = {
+									unusedparams = true,
+									shadow = true,
+								},
+								hints = {
+									assignVariableTypes = true,
+									compositeLiteralFields = true,
+									compositeLiteralTypes = true,
+									constantValues = true,
+									functionTypeParameters = true,
+									parameterNames = true,
+									rangeVariableTypes = true,
+								},
+								codelenses = {
+									gc_details = false,
+									generate = true,
+									regenerate_cgo = true,
+									run_govulncheck = true,
+									test = true,
+									tidy = true,
+									upgrade_dependency = true,
+									vendor = true,
+								},
+								usePlaceholders = true,
+								completeUnimported = true,
+								staticcheck = true,
+								directoryFilters = { "-.git", "-.vscode", "-.idea", "-.vscode-test", "-node_modules" },
+								semanticTokens = true,
+								staticcheck = true,
+								gofumpt = true,
 							},
 						},
 						handlers = {
