@@ -104,6 +104,14 @@ local function custom_keybindings()
 		end
 	end, { desc = "Focus nvim-tree" })
 
+	remap({ "n", "t" }, "<leader>ex", function()
+		local api = require("nvim-tree.api")
+
+		if api.tree.is_visible() then
+			api.tree.close()
+		end
+	end, { desc = "Close nvim-tree" })
+
 	-- Additional Mappings
 	remap({ "n", "t" }, ";", ":", { desc = "Enter command mode" })
 	remap("n", "<C-s>", ":wa<CR>", { desc = "Save all buffers in normal mode" })
@@ -115,6 +123,12 @@ local function custom_keybindings()
 	remap("v", "<C-d>", "y'>p", { desc = "Duplicate selected lines" })
 	remap({ "n", "t", "v" }, "<C-v>", '"+p', { desc = "Paste from system clipboard" })
 	remap({ "n", "t", "v" }, "<S-C-v>", "p", { desc = "Paste from default register" })
+
+	-- Minimap
+	remap({ "n", "t" }, "<leader>mm", ":MinimapToggle<CR>", { desc = "Toggle minimap window" })
+	remap({ "n", "t" }, "<leader>mr", ":MinimapRefresh<CR>", { desc = "Force refresh minimap window" })
+	remap({ "n", "t" }, "<leader>mu", ":MinimapUpdateHighlight<CR>", { desc = "Force update minimap highlight" })
+	remap({ "n", "t" }, "<leader>me", ":MinimapRescan<CR>", { desc = "Force recalculation of minimap scaling ratio" })
 
 	-- Keymap for Telescope fuzzy finders
 	local remap = vim.api.nvim_set_keymap
@@ -174,7 +188,7 @@ local function setup_plugins()
 				local window_config = {
 					documentation = {
 						max_height = 15,
-						max_width = 60,
+						max_width = 40,
 						border = "rounded",
 						col_offset = 1,
 						side_padding = 1,
@@ -279,29 +293,32 @@ local function setup_plugins()
 
 					local lspconfig = require("lspconfig")
 
-					lspconfig.ts_ls.setup({
+					lspconfig.eslint.setup({
 						capabilities = capabilities,
 						on_attach = function(client, bufnr)
-							if vim.lsp.get_active_clients({ name = "angularls" })[1] then
-								client.server_capabilities.documentFormattingProvider = false
-							end
+							-- Ensure eslint formatting doesn't conflict with other formatters
+							client.server_capabilities.documentFormattingProvider = true
 							on_attach(client, bufnr)
 						end,
 						settings = {
-							typescript = {
-								inlayHints = {
-									includeInlayParameterNameHints = "all",
-									includeInlayParameterNameHintsWhenArgumentMatchesName = true,
-									includeInlayVariableTypeHints = true,
-									includeInlayFunctionParameterTypeHints = true,
-									includeInlayVariableTypeHintsWhenTypeMatchesName = true,
-									includeInlayPropertyDeclarationTypeHints = true,
-									includeInlayFunctionLikeReturnTypeHints = true,
-									includeInlayEnumMemberValueHints = true,
+							-- Help catch React-specific issues
+							workingDirectory = { mode = "auto" },
+							format = true,
+							lint = true,
+							quiet = false,
+							-- Recommended configuration for React projects
+							codeAction = {
+								disableRuleComment = {
+									enable = true,
+									location = "separateLine",
 								},
-								implementationsCodeLens = true,
-								referencesCodeLens = true,
-								displayPartsForJSDocs = true,
+								showDocumentation = {
+									enable = true,
+								},
+							},
+							codeActionOnSave = {
+								enable = true,
+								mode = "all",
 							},
 						},
 						handlers = {
@@ -318,14 +335,76 @@ local function setup_plugins()
 						},
 					})
 
+					lspconfig.ts_ls.setup({
+						capabilities = capabilities,
+						on_attach = function(client, bufnr)
+							on_attach(client, bufnr)
+						end,
+						settings = {
+							typescript = {
+								inlayHints = {
+									includeInlayParameterNameHints = "all",
+									includeInlayParameterNameHintsWhenArgumentMatchesName = true,
+									includeInlayVariableTypeHints = true,
+									includeInlayFunctionParameterTypeHints = true,
+									includeInlayVariableTypeHintsWhenTypeMatchesName = true,
+									includeInlayPropertyDeclarationTypeHints = true,
+									includeInlayFunctionLikeReturnTypeHints = true,
+									includeInlayEnumMemberValueHints = true,
+								},
+								suggest = {
+									completeFunctionCalls = true,
+								},
+								implementationsCodeLens = true,
+								referencesCodeLens = true,
+								-- Enhanced settings for React development
+								preferences = {
+									importModuleSpecifier = "non-relative",
+									useAliasesForRenames = true,
+								},
+							},
+							javascript = {
+								inlayHints = {
+									includeInlayParameterNameHints = "all",
+									includeInlayParameterNameHintsWhenArgumentMatchesName = true,
+									includeInlayVariableTypeHints = true,
+									includeInlayFunctionParameterTypeHints = true,
+								},
+								suggest = {
+									completeFunctionCalls = true,
+								},
+							},
+						},
+						handlers = {
+							["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
+								border = "rounded",
+								max_width = 80,
+								max_height = 20,
+							}),
+							["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, {
+								border = "rounded",
+								max_width = 80,
+								max_height = 20,
+							}),
+						},
+						-- Add filetype detection for JSX/TSX files
+						filetypes = {
+							"javascript",
+							"javascriptreact",
+							"javascript.jsx",
+							"typescript",
+							"typescriptreact",
+							"typescript.tsx",
+						},
+					})
+
 					lspconfig.angularls.setup({
 						capabilities = capabilities,
 						on_attach = on_attach,
 						root_dir = require("lspconfig").util.root_pattern("angular.json", "project.json"),
 						on_new_config = function(new_config, new_root_dir)
-							local global_ts = vim.fn.expand("~/.nvm/versions/node/v22.11.0/lib/node_modules/typescript")
-							local global_ng =
-								vim.fn.expand("~/.nvm/versions/node/v22.11.0/lib/node_modules/@angular/language-server")
+							local global_ts = vim.fn.expand("~/.npm/lib/node_modules/typescript")
+							local global_ng = vim.fn.expand("~/.npm/lib/node_modules/@angular/language-server")
 
 							new_config.cmd = {
 								"ngserver",
@@ -436,6 +515,7 @@ local function setup_plugins()
 			config = function()
 				require("catppuccin").setup({
 					flavour = "mocha",
+					transparent_background = true,
 				})
 				vim.cmd.colorscheme("catppuccin")
 			end,
@@ -514,7 +594,7 @@ local function setup_plugins()
 					ignore_list = {},
 				},
 				view = {
-					width = 50,
+					width = 35,
 					side = "left",
 					adaptive_size = false,
 					number = true,
@@ -636,125 +716,77 @@ local function setup_plugins()
 			},
 		},
 		{
-			"gorbit99/codewindow.nvim",
+			"wfxr/minimap.vim",
+			build = "cargo install --locked code-minimap",
 			config = function()
-				local codewindow = require("codewindow")
-				codewindow.setup({
-					active_in_terminals = false,
-					auto_enable = true,
-					width = 15,
-					use_lsp = true,
-					use_git = true,
-					use_treesitter = true,
-					show_cursor = true,
-					window_border = "none",
-					minimap_window = {
-						width = 15,
-						height_percentage = 100,
-						style = "minimal",
-					},
-					exclude_filetypes = {
-						"NvimTree",
-						"TelescopePrompt",
-					},
-				})
-
-				vim.keymap.set("n", "<leader>mm", function()
-					codewindow.toggle_minimap()
-				end, { desc = "Toggle minimap" })
-				vim.keymap.set("n", "<leader>mf", function()
-					codewindow.toggle_focus()
-				end, { desc = "Toggle focus minimap" })
+				vim.g.minimap_width = 10
+				vim.g.minimap_highlight_search = 1
+				vim.g.minimap_git_colors = 1
+				vim.g.minimap_range_color = "Search"
+				-- :highlight minimapRange ctermbg=242 ctermfg=228 guibg=#004c68 guifg=#00d0ff
 			end,
 		},
-		{
-			"github/copilot.vim",
-			config = function()
-				vim.g.copilot_filetypes = {
-					["*"] = true,
-					["markdown"] = true,
-					["help"] = false,
-				}
-
-				vim.g.copilot_no_tab_map = false
-				-- Use Alt-] to accept suggestion
-				-- vim.keymap.set('i', '<M-]>', 'copilot#Accept("\\<CR>")', {
-				--   expr = true,
-				--   replace_keycodes = false
-				-- })
-				-- Use Alt-[ to cycle to next suggestion
-				vim.keymap.set("i", "<M-[>", "<Plug>(copilot-next)")
-			end,
-		},
-		{
-			"CopilotC-Nvim/CopilotChat.nvim",
-			branch = "main",
-			dependencies = {
-				{ "nvim-lua/plenary.nvim", branch = "master" },
-				"github/copilot.vim",
-			},
-			config = function()
-				require("CopilotChat").setup({
-					debug = false,
-
-					-- Configuration for floating chat window
-					window = {
-						layout = "float",
-						border = "single",
-						size = {
-							width = "80%",
-							height = "60%",
-						},
-						win_options = {
-							wrap = true,
-							linebreak = true,
-							foldcolumn = "0",
-							winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
-						},
-					},
-
-					-- Configuration for split chat window -- NOTE: This breaks the plugin, for some reason it cannot open a new buffer due to invalid name
-					-- window = {
-					--   layout = 'vsplit',
-					--   relative = 'editor',
-					--   width = 50,
-					--   position = 'right',
-					--   border = 'none',
-					--   title = "Copilot Chat",
-					--   name = "copilot-chat",
-					--   win_options = {
-					--     wrap = true,
-					--     linebreak = true,
-					--     foldcolumn = '0',
-					--     winhighlight = 'Normal:Normal',
-					--     buftype = 'nofile',
-					--     filetype = 'copilot-chat',
-					--     title = "Copilot Chat",
-					--   }
-					-- },
-					-- buf_options = {
-					--   buflisted = false,
-					--   buftype = 'nofile',
-					--   swapfile = false,
-					--   filetype = 'copilot-chat'
-					-- },
-				})
-
-				local function set_keymaps()
-					vim.keymap.set("n", "<leader>cc", "<cmd>CopilotChat<cr>", { desc = "Open Copilot Chat" })
-					vim.keymap.set({ "n", "v" }, "<leader>ce", "<cmd>CopilotChatExplain<cr>", { desc = "Explain code" })
-					vim.keymap.set({ "n", "v" }, "<leader>cf", "<cmd>CopilotChatFix<cr>", { desc = "Fix code" })
-					vim.keymap.set(
-						{ "n", "v" },
-						"<leader>co",
-						"<cmd>CopilotChatOptimize<cr>",
-						{ desc = "Optimize code" }
-					)
-				end
-
-				set_keymaps()
-			end,
-		},
+		-- {
+		-- 	"github/copilot.vim",
+		-- 	config = function()
+		-- 		vim.g.copilot_filetypes = {
+		-- 			["*"] = true,
+		-- 			["markdown"] = true,
+		-- 			["help"] = false,
+		-- 		}
+		--
+		-- 		vim.g.copilot_no_tab_map = false
+		-- 		-- Use Alt-] to accept suggestion
+		-- 		-- vim.keymap.set('i', '<M-]>', 'copilot#Accept("\\<CR>")', {
+		-- 		--   expr = true,
+		-- 		--   replace_keycodes = false
+		-- 		-- })
+		-- 		-- Use Alt-[ to cycle to next suggestion
+		-- 		vim.keymap.set("i", "<M-[>", "<Plug>(copilot-next)")
+		-- 	end,
+		-- },
+		-- {
+		-- 	"CopilotC-Nvim/CopilotChat.nvim",
+		-- 	branch = "main",
+		-- 	dependencies = {
+		-- 		{ "nvim-lua/plenary.nvim", branch = "master" },
+		-- 		"github/copilot.vim",
+		-- 	},
+		-- 	config = function()
+		-- 		require("CopilotChat").setup({
+		-- 			debug = false,
+		--
+		-- 			window = {
+		-- 				layout = "float",
+		-- 				border = "single",
+		-- 				size = {
+		-- 					width = "80%",
+		-- 					height = "60%",
+		-- 				},
+		-- 				win_options = {
+		-- 					wrap = true,
+		-- 					linebreak = true,
+		-- 					foldcolumn = "0",
+		-- 					winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+		-- 				},
+		-- 			},
+		-- 		})
+		--
+		-- 		local function set_keymaps()
+		-- 			vim.keymap.set("n", "<leader>cc", "<cmd>CopilotChat<cr>", { desc = "Open Copilot Chat" })
+		-- 			vim.keymap.set({ "n", "v" }, "<leader>ce", "<cmd>CopilotChatExplain<cr>", { desc = "Explain code" })
+		-- 			vim.keymap.set({ "n", "v" }, "<leader>cf", "<cmd>CopilotChatFix<cr>", { desc = "Fix code" })
+		-- 			vim.keymap.set(
+		-- 				{ "n", "v" },
+		-- 				"<leader>co",
+		-- 				"<cmd>CopilotChatOptimize<cr>",
+		-- 				{ desc = "Optimize code" }
+		-- 			)
+		-- 		end
+		--
+		-- 		set_keymaps()
+		-- 	end,
+		-- },
 	})
 end
 
