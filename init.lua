@@ -1,3 +1,4 @@
+local vim = vim
 local function basic_config()
 	local settings = {
 		background = dark,
@@ -33,13 +34,13 @@ local function basic_config()
 	vim.g.netrw_banner = 0
 	vim.g.netrw_winsize = 25
 	vim.g.netrw_liststyle = 3
-	vim.g.inlay_hints = true
-	vim.g.inlay_hints_visible = true
 	vim.lsp.inlay_hint.enable()
 	vim.diagnostic.config({
 		update_in_insert = true,
+		virtual_text = true,
 	})
 
+	vim.o.signcolumn = "yes"
 	vim.cmd("set nocompatible")
 end
 
@@ -47,31 +48,10 @@ local function remap(mode, input, result, opts)
 	vim.keymap.set(mode, input, result, opts or {})
 end
 
-local function smart_buffer_close()
-	local bufs = vim.fn.getbufinfo({ buflisted = true })
-	local current_buf = vim.fn.bufnr("%")
-	local previous_buf = nil
-	for i, buf in ipairs(bufs) do
-		if buf.bufnr == current_buf and i > 1 then
-			previous_buf = bufs[i - 1].bufnr
-			break
-		end
-	end
-
-	vim.cmd("bd")
-
-	if #bufs <= 1 then
-		vim.cmd("NvimTreeFocus")
-	elseif previous_buf then
-		vim.cmd("buffer " .. previous_buf)
-	end
-end
-
 local function custom_keybindings()
 	-- Tabs
 	remap("n", "<Tab>", ":bnext<CR>", { desc = "Next buffer" })
 	remap("n", "<S-Tab>", ":bprevious<CR>", { desc = "Previous buffer" })
-	remap("n", "<leader>x", smart_buffer_close, { desc = "Smart buffer close" })
 
 	-- Visual mode indentation
 	remap("v", "<Tab>", ">gv", { desc = "Indent selected lines right" })
@@ -80,7 +60,6 @@ local function custom_keybindings()
 	-- Splits
 	remap({ "n", "t" }, "<leader>s", ":new<CR>")
 	remap({ "n", "t" }, "<leader>v", ":vnew<CR>")
-	remap("n", "<leader>t", ":split | resize 15 | terminal<CR>", { desc = "Open terminal in split" })
 
 	-- Split navigation
 	remap({ "n", "t" }, "<leader>h", "<C-w>h")
@@ -91,11 +70,6 @@ local function custom_keybindings()
 	-- Navigation
 	remap({ "n", "t" }, "<leader>e", function()
 		local api = require("nvim-tree.api")
-
-		if vim.bo.filetype == "NvimTree" then
-			return
-		end
-
 		if api.tree.is_visible() then
 			api.tree.focus()
 		else
@@ -103,14 +77,6 @@ local function custom_keybindings()
 			api.tree.focus()
 		end
 	end, { desc = "Focus nvim-tree" })
-
-	remap({ "n", "t" }, "<leader>ex", function()
-		local api = require("nvim-tree.api")
-
-		if api.tree.is_visible() then
-			api.tree.close()
-		end
-	end, { desc = "Close nvim-tree" })
 
 	-- Additional Mappings
 	remap({ "n", "t" }, ";", ":", { desc = "Enter command mode" })
@@ -174,7 +140,6 @@ local function setup_plugins()
 		-- Completion ecosystem
 		{
 			"hrsh7th/nvim-cmp",
-			-- event = "InsertEnter",
 			dependencies = {
 				"hrsh7th/cmp-nvim-lsp",
 				"hrsh7th/cmp-buffer",
@@ -199,27 +164,10 @@ local function setup_plugins()
 
 				cmp.setup({
 					window = window_config,
-					-- This code makes the cmp_lsp crash
-					-- formatting = {
-					-- 	format = function(entry, vim_item)
-					-- 		local docs = entry.completion_item.documentation
-					-- 		if docs then
-					-- 			vim_item.menu = docs
-					-- 		end
-					-- 		return vim_item
-					-- 	end,
-					-- },
 					completion = {
 						completeopt = "menu,menuone,noinsert,noselect",
 						keyword_length = 1,
 					},
-					mapping = cmp.mapping.preset.insert({
-						["<C-b>"] = cmp.mapping.scroll_docs(-4),
-						["<C-f>"] = cmp.mapping.scroll_docs(4),
-						["<C-Space>"] = cmp.mapping.complete(),
-						["<C-e>"] = cmp.mapping.abort(),
-						["<CR>"] = cmp.mapping.confirm({ select = true }),
-					}),
 					sources = cmp.config.sources({
 						{ name = "nvim_lsp" },
 						{ name = "buffer" },
@@ -258,256 +206,279 @@ local function setup_plugins()
 			end,
 		},
 
-		-- LSP Configuration
+		-- -- LSP Configuration with Mason
+		-- Mason
+		{
+			"williamboman/mason.nvim",
+			config = function()
+				require("mason").setup()
+			end,
+		},
+
+		-- Mason lsp config
+		{
+			"williamboman/mason-lspconfig.nvim",
+			config = function()
+				require("mason-lspconfig").setup({
+					ensure_installed = {
+						"ts_ls",
+						"angularls",
+						"cssls",
+						"html",
+						"gopls",
+						"lua_ls",
+					},
+				})
+			end,
+		},
+
+		-- LspConfig
 		{
 			"neovim/nvim-lspconfig",
 			dependencies = {
 				"hrsh7th/cmp-nvim-lsp",
-				"ray-x/go.nvim",
 			},
 			config = function()
-				vim.defer_fn(function()
-					local function on_attach(client, bufnr)
-						local function buf_set_keymap(mode, lhs, rhs, desc)
-							vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
-						end
-
-						buf_set_keymap("n", "gd", vim.lsp.buf.definition, "Go to definition")
-						buf_set_keymap("n", "gi", vim.lsp.buf.implementation, "Go to implementation")
-						buf_set_keymap("n", "gr", vim.lsp.buf.references, "Go to references")
-						buf_set_keymap("n", "K", vim.lsp.buf.hover, "Show hover documentation")
-						buf_set_keymap("n", "<leader>rn", vim.lsp.buf.rename, "Rename symbol")
-						buf_set_keymap("n", "<leader>ca", vim.lsp.buf.code_action, "Code actions")
-
-						vim.bo[bufnr].omnifunc = "v:lua.vim.lsp.omnifunc"
-
-						-- Debug
-						-- print(string.format("LSP %s initialized for buffer %s", client.name, bufnr))
+				local lspconfig = require("lspconfig")
+				local capabilities = require("cmp_nvim_lsp").default_capabilities()
+				local function on_attach(client, bufnr)
+					local function buf_set_keymap(mode, lhs, rhs, desc)
+						vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
 					end
 
-					local capabilities = vim.lsp.protocol.make_client_capabilities()
-					local has_cmp, cmp_lsp = pcall(require, "cmp_nvim_lsp")
-					if has_cmp then
-						capabilities = cmp_lsp.default_capabilities(capabilities)
-					end
+					buf_set_keymap("n", "gd", vim.lsp.buf.definition, "Go to definition")
+					buf_set_keymap("n", "gi", vim.lsp.buf.implementation, "Go to implementation")
+					buf_set_keymap("n", "gr", vim.lsp.buf.references, "Go to references")
+					buf_set_keymap("n", "K", vim.lsp.buf.hover, "Show hover documentation")
+					buf_set_keymap("n", "<leader>rn", vim.lsp.buf.rename, "Rename symbol")
+					buf_set_keymap("n", "<leader>ca", vim.lsp.buf.code_action, "Code actions")
 
-					local lspconfig = require("lspconfig")
+					vim.bo[bufnr].omnifunc = "v:lua.vim.lsp.omnifunc"
 
-					lspconfig.eslint.setup({
-						capabilities = capabilities,
-						on_attach = function(client, bufnr)
-							-- Ensure eslint formatting doesn't conflict with other formatters
-							client.server_capabilities.documentFormattingProvider = true
-							on_attach(client, bufnr)
-						end,
-						settings = {
-							-- Help catch React-specific issues
-							workingDirectory = { mode = "auto" },
-							format = true,
-							lint = true,
-							quiet = false,
-							-- Recommended configuration for React projects
-							codeAction = {
-								disableRuleComment = {
-									enable = true,
-									location = "separateLine",
-								},
-								showDocumentation = {
-									enable = true,
-								},
+					-- Debug
+					-- print(string.format("LSP %s initialized for buffer %s", client.name, bufnr))
+				end
+
+				-- TypeScript configuration
+				lspconfig.ts_ls.setup({
+					capabilities = capabilities,
+					on_attach = on_attach,
+					settings = {
+						typescript = {
+							inlayHints = {
+								includeInlayParameterNameHints = "all",
+								includeInlayParameterNameHintsWhenArgumentMatchesName = false,
+								includeInlayFunctionParameterTypeHints = true,
+								includeInlayVariableTypeHints = true,
+								includeInlayPropertyDeclarationTypeHints = true,
+								includeInlayFunctionLikeReturnTypeHints = true,
+								includeInlayEnumMemberValueHints = true,
 							},
-							codeActionOnSave = {
+							updateImportsOnFileMove = {
+								enabled = "always",
+							},
+						},
+						javascript = {
+							inlayHints = {
+								includeInlayParameterNameHints = "all",
+								includeInlayParameterNameHintsWhenArgumentMatchesName = false,
+								includeInlayFunctionParameterTypeHints = true,
+								includeInlayVariableTypeHints = true,
+								includeInlayPropertyDeclarationTypeHints = true,
+								includeInlayFunctionLikeReturnTypeHints = true,
+								includeInlayEnumMemberValueHints = true,
+							},
+						},
+					},
+				})
+
+				-- Angular configuration
+				lspconfig.angularls.setup({
+					capabilities = capabilities,
+					on_attach = on_attach,
+					root_dir = require("lspconfig").util.root_pattern("angular.json", "project.json"),
+					on_new_config = function(new_config, new_root_dir)
+						local global_ts = vim.fn.expand("~/.npm/lib/node_modules/typescript")
+						local global_ng = vim.fn.expand("~/.npm/lib/node_modules/@angular/language-server")
+
+						new_config.cmd = {
+							"ngserver",
+							"--stdio",
+							"--tsProbeLocations",
+							global_ts,
+							"--ngProbeLocations",
+							global_ng,
+						}
+					end,
+				})
+
+				-- Go configuration
+				lspconfig.gopls.setup({
+					capabilities = capabilities,
+					on_attach = on_attach,
+					settings = {
+						gopls = {
+							hints = {
+								assignVariableTypes = true,
+								compositeLiteralFields = true,
+								compositeLiteralTypes = true,
+								constantValues = true,
+								functionTypeParameters = true,
+								parameterNames = true,
+								rangeVariableTypes = true,
+							},
+							analyses = {
+								unusedparams = true,
+								shadow = true,
+							},
+							codelenses = {
+								generate = true,
+								gc_details = true,
+								test = true,
+								tidy = true,
+							},
+							usePlaceholders = true,
+							completionDocumentation = true,
+							importShortcut = "Definition",
+							experimentalPostfixCompletions = true,
+						},
+					},
+				})
+
+				-- Lua configuration
+				lspconfig.lua_ls.setup({
+					capabilities = capabilities,
+					settings = {
+						Lua = {
+							completion = {
+								callSnippet = "Replace",
 								enable = true,
-								mode = "all",
+								keywordSnippet = "Replace",
+								showWord = "Enable",
+								workspaceWord = true,
 							},
-						},
-						handlers = {
-							["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-								border = "rounded",
-								max_width = 80,
-								max_height = 20,
-							}),
-							["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, {
-								border = "rounded",
-								max_width = 80,
-								max_height = 20,
-							}),
-						},
-					})
-
-					lspconfig.ts_ls.setup({
-						capabilities = capabilities,
-						on_attach = function(client, bufnr)
-							on_attach(client, bufnr)
-						end,
-						settings = {
-							typescript = {
-								inlayHints = {
-									includeInlayParameterNameHints = "all",
-									includeInlayParameterNameHintsWhenArgumentMatchesName = true,
-									includeInlayVariableTypeHints = true,
-									includeInlayFunctionParameterTypeHints = true,
-									includeInlayVariableTypeHintsWhenTypeMatchesName = true,
-									includeInlayPropertyDeclarationTypeHints = true,
-									includeInlayFunctionLikeReturnTypeHints = true,
-									includeInlayEnumMemberValueHints = true,
+							diagnostics = {
+								enable = true,
+								globals = {
+									"vim",
+									"describe",
+									"it",
+									"before_each",
+									"after_each",
 								},
-								suggest = {
-									completeFunctionCalls = true,
-								},
-								implementationsCodeLens = true,
-								referencesCodeLens = true,
-								-- Enhanced settings for React development
-								preferences = {
-									importModuleSpecifier = "non-relative",
-									useAliasesForRenames = true,
+								disable = {
+									"trailing-space",
 								},
 							},
-							javascript = {
-								inlayHints = {
-									includeInlayParameterNameHints = "all",
-									includeInlayParameterNameHintsWhenArgumentMatchesName = true,
-									includeInlayVariableTypeHints = true,
-									includeInlayFunctionParameterTypeHints = true,
-								},
-								suggest = {
-									completeFunctionCalls = true,
+							hover = {
+								enable = true,
+								viewNumber = true,
+								viewString = true,
+								viewStringMax = 1000,
+							},
+							workspace = {
+								library = vim.api.nvim_get_runtime_file("", true),
+								maxPreload = 2000,
+								preloadFileSize = 50000,
+								checkThirdParty = false,
+							},
+							runtime = {
+								version = "LuaJIT",
+								path = runtime_path,
+								special = {
+									include = "require",
 								},
 							},
-						},
-						handlers = {
-							["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-								border = "rounded",
-								max_width = 80,
-								max_height = 20,
-							}),
-							["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, {
-								border = "rounded",
-								max_width = 80,
-								max_height = 20,
-							}),
-						},
-						-- Add filetype detection for JSX/TSX files
-						filetypes = {
-							"javascript",
-							"javascriptreact",
-							"javascript.jsx",
-							"typescript",
-							"typescriptreact",
-							"typescript.tsx",
-						},
-					})
-
-					lspconfig.angularls.setup({
-						capabilities = capabilities,
-						on_attach = on_attach,
-						root_dir = require("lspconfig").util.root_pattern("angular.json", "project.json"),
-						on_new_config = function(new_config, new_root_dir)
-							local global_ts = vim.fn.expand("~/.npm/lib/node_modules/typescript")
-							local global_ng = vim.fn.expand("~/.npm/lib/node_modules/@angular/language-server")
-
-							new_config.cmd = {
-								"ngserver",
-								"--stdio",
-								"--tsProbeLocations",
-								global_ts,
-								"--ngProbeLocations",
-								global_ng,
-							}
-						end,
-						settings = {
-							angular = {
-								inlayHints = {
-									includeInlayParameterNameHints = "all",
-									includeInlayParameterNameHintsWhenArgumentMatchesName = true,
-									includeInlayVariableTypeHints = true,
-									includeInlayFunctionParameterTypeHints = true,
-									includeInlayVariableTypeHintsWhenTypeMatchesName = true,
-									includeInlayPropertyDeclarationTypeHints = true,
-									includeInlayFunctionLikeReturnTypeHints = true,
-									includeInlayEnumMemberValueHints = true,
-								},
-								implementationsCodeLens = true,
-								referencesCodeLens = true,
-								displayPartsForJSDocs = true,
+							hint = {
+								enable = true,
+								arrayIndex = "Disable",
+								setType = true,
+								paramName = "All",
+								paramType = true,
+								semicolon = "SameLine",
+							},
+							telemetry = {
+								enable = false,
 							},
 						},
-						handlers = {
-							["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-								border = "rounded",
-								max_width = 80,
-								max_height = 20,
-							}),
-							["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, {
-								border = "rounded",
-								max_width = 80,
-								max_height = 20,
-							}),
-						},
-					})
-
-					lspconfig.gopls.setup({
-						cmd = { vim.fn.expand("$GOPATH") .. "/bin/gopls" },
-						capabilities = capabilities,
-						on_attach = on_attach,
-						on_init = function(client)
-							-- Debug
-							print("Go LSP initialized")
-							print("Go LSP executable path: " .. vim.fn.exepath("gopls"))
-							print("GOPATH: " .. (vim.fn.expand("$GOPATH") or "No path"))
-						end,
-						settings = {
-							gopls = {
-								analyses = {
-									unusedparams = true,
-									shadow = true,
-								},
-								hints = {
-									assignVariableTypes = true,
-									compositeLiteralFields = true,
-									compositeLiteralTypes = true,
-									constantValues = true,
-									functionTypeParameters = true,
-									parameterNames = true,
-									rangeVariableTypes = true,
-								},
-								codelenses = {
-									gc_details = false,
-									generate = true,
-									regenerate_cgo = true,
-									run_govulncheck = true,
-									test = true,
-									tidy = true,
-									upgrade_dependency = true,
-									vendor = true,
-								},
-								usePlaceholders = true,
-								completeUnimported = true,
-								staticcheck = true,
-								directoryFilters = { "-.git", "-.vscode", "-.idea", "-.vscode-test", "-node_modules" },
-								semanticTokens = true,
-								staticcheck = true,
-								gofumpt = true,
-							},
-						},
-						handlers = {
-							["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-								border = "rounded",
-								max_width = 80,
-								max_height = 20,
-							}),
-							["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, {
-								border = "rounded",
-								max_width = 80,
-								max_height = 20,
-							}),
-						},
-					})
-				end, 100)
+					},
+				})
 			end,
 		},
 
-		-- General
+		-- Formatter
+		{
+			"stevearc/conform.nvim",
+			config = function()
+				require("conform").setup({
+					formatters_by_ft = {
+						typescript = { "eslint_d", "prettier" },
+						javascript = { "eslint_d", "prettier" },
+						typescriptreact = { "eslint_d", "prettier" },
+						javascriptreact = { "eslint_d", "prettier" },
+						html = { "prettier" },
+						css = { "prettier" },
+						scss = { "prettier" },
+						json = { "prettier" },
+						yaml = { "prettier" },
+						markdown = { "prettier" },
+						go = { "gofumpt", "goimports" },
+						lua = { "stylua" },
+					},
+					format_on_save = {
+						timeout_ms = 500,
+						lsp_fallback = true,
+					},
+				})
+			end,
+		},
+
+		-- Linter
+		{
+			"mfussenegger/nvim-lint",
+			config = function()
+				require("lint").linters_by_ft = {
+					typescript = { "eslint" },
+					javascript = { "eslint_d" },
+					typescriptreact = { "eslint_d" },
+					javascriptreact = { "eslint_d" },
+					go = { "golangcilint" },
+					lua = { "luacheck" },
+				}
+
+				local lint_augroup = vim.api.nvim_create_augroup("Linting", { clear = true })
+
+				local function safe_lint()
+					local lint_ok, lint_err = pcall(function()
+						require("lint").try_lint()
+					end)
+
+					if not lint_ok then
+						vim.notify("Linting failed: " .. tostring(lint_err), vim.log.levels.WARN)
+					end
+				end
+
+				vim.api.nvim_create_autocmd({
+					"BufWritePost",
+					"BufEnter",
+					"InsertLeave",
+					"TextChanged",
+					"CursorHold",
+				}, {
+					group = lint_augroup,
+					callback = function()
+						if vim.bo.modifiable and vim.bo.buftype == "" then
+							safe_lint()
+						end
+					end,
+				})
+
+				vim.opt.updatetime = 1000
+			end,
+		},
+
+		-- -- UI
+		-- Theme
 		{
 			"catppuccin/nvim",
 			name = "catppuccin",
@@ -520,41 +491,28 @@ local function setup_plugins()
 				vim.cmd.colorscheme("catppuccin")
 			end,
 		},
-		{
-			"stevearc/conform.nvim",
-			event = "BufWritePre",
-			cmd = { "ConformInfo" },
-			keys = {
-				{
-					"<leader>fm",
-					function()
-						require("conform").format({ async = true, lsp_fallback = true })
-					end,
-					mode = "",
-					desc = "Format buffer",
-				},
-			},
-			opts = {
-				formatters_by_ft = {
-					lua = { "stylua" },
-					css = { "prettier" },
-					html = { "prettier" },
-					typecript = { "prettier" },
-					javascript = { "prettier" },
-					json = { "prettier" },
-					yaml = { "prettier" },
-					markdown = { "prettier" },
-					go = { "gofmt", "goimports" },
-				},
 
-				format_on_save = {
-					lsp_fallback = true,
+		-- File explorer
+		{
+			"nvim-tree/nvim-tree.lua",
+			opts = {
+				sync_root_with_cwd = true,
+				respect_buf_cwd = true,
+				update_focused_file = {
+					enable = true,
+					update_root = true,
+					ignore_list = {},
+				},
+				view = {
+					width = 35,
+					side = "left",
+					adaptive_size = false,
+					number = false,
 				},
 			},
-			init = function()
-				vim.o.formatexpr = "v:lua.require'conform'.formatexpr()"
-			end,
 		},
+
+		-- Code colorization
 		{
 			"nvim-treesitter/nvim-treesitter",
 			run = ":TSUpdate",
@@ -576,6 +534,8 @@ local function setup_plugins()
 				})
 			end,
 		},
+
+		-- Indentation lines
 		{
 			"lukas-reineke/indent-blankline.nvim",
 			main = "ibl",
@@ -583,24 +543,8 @@ local function setup_plugins()
 			---@type ibl.config
 			opts = {},
 		},
-		{
-			"nvim-tree/nvim-tree.lua",
-			opts = {
-				sync_root_with_cwd = true,
-				respect_buf_cwd = true,
-				update_focused_file = {
-					enable = true,
-					update_root = true,
-					ignore_list = {},
-				},
-				view = {
-					width = 35,
-					side = "left",
-					adaptive_size = false,
-					number = true,
-				},
-			},
-		},
+
+		-- Buffer configuration
 		{
 			"akinsho/bufferline.nvim",
 			dependencies = "nvim-tree/nvim-web-devicons",
@@ -634,20 +578,8 @@ local function setup_plugins()
 				})
 			end,
 		},
-		{
-			"numToStr/Comment.nvim",
-			opts = {
-				toggler = {
-					line = "<leader>/",
-				},
-				opleader = {
-					line = "<leader>/",
-				},
-			},
-			keys = {
-				{ "<leader>/", mode = { "n", "v" } },
-			},
-		},
+
+		-- Bottom status bar
 		{
 			"nvim-lualine/lualine.nvim",
 			dependencies = { "nvim-tree/nvim-web-devicons" },
@@ -698,6 +630,22 @@ local function setup_plugins()
 				})
 			end,
 		},
+
+		-- Minimap
+		{
+			"wfxr/minimap.vim",
+			build = "cargo install --locked code-minimap",
+			config = function()
+				vim.g.minimap_width = 10
+				vim.g.minimap_highlight_search = 1
+				vim.g.minimap_git_colors = 1
+				vim.g.minimap_range_color = "Search"
+				-- :highlight minimapRange ctermbg=242 ctermfg=228 guibg=#004c68 guifg=#00d0ff
+			end,
+		},
+
+		-- -- Applications
+		-- Git
 		{
 			"kdheepak/lazygit.nvim",
 			lazy = false,
@@ -715,78 +663,107 @@ local function setup_plugins()
 				{ "<leader>gg", ":LazyGit<CR>", desc = "Open LazyGit" },
 			},
 		},
+
+		-- Copilot
 		{
-			"wfxr/minimap.vim",
-			build = "cargo install --locked code-minimap",
+			"github/copilot.vim",
+			lazy = true,
+			cmd = "Copilot",
+			keys = {
+				-- { "<leader>cp", ":Copilot enable<CR>", desc = "Enable Copilot" },
+				{
+					"<leader>cp",
+					function()
+						local copilot_status = vim.fn["copilot#Enabled"]()
+						if copilot_status == 1 then
+							vim.cmd("Copilot disable")
+							vim.cmd("edit")
+							print("Copilot Disabled")
+						else
+							vim.cmd("Copilot enable")
+							vim.cmd("edit")
+							print("Copilot Enabled")
+						end
+					end,
+					desc = "Toggle Copilot",
+				},
+			},
 			config = function()
-				vim.g.minimap_width = 10
-				vim.g.minimap_highlight_search = 1
-				vim.g.minimap_git_colors = 1
-				vim.g.minimap_range_color = "Search"
-				-- :highlight minimapRange ctermbg=242 ctermfg=228 guibg=#004c68 guifg=#00d0ff
+				vim.g.copilot_filetypes = {
+					["*"] = true,
+					["markdown"] = true,
+					["help"] = false,
+				}
+
+				vim.g.copilot_no_tab_map = false
+				vim.keymap.set("i", "<M-[>", "<Plug>(copilot-next)")
 			end,
 		},
-		-- {
-		-- 	"github/copilot.vim",
-		-- 	config = function()
-		-- 		vim.g.copilot_filetypes = {
-		-- 			["*"] = true,
-		-- 			["markdown"] = true,
-		-- 			["help"] = false,
-		-- 		}
-		--
-		-- 		vim.g.copilot_no_tab_map = false
-		-- 		-- Use Alt-] to accept suggestion
-		-- 		-- vim.keymap.set('i', '<M-]>', 'copilot#Accept("\\<CR>")', {
-		-- 		--   expr = true,
-		-- 		--   replace_keycodes = false
-		-- 		-- })
-		-- 		-- Use Alt-[ to cycle to next suggestion
-		-- 		vim.keymap.set("i", "<M-[>", "<Plug>(copilot-next)")
-		-- 	end,
-		-- },
-		-- {
-		-- 	"CopilotC-Nvim/CopilotChat.nvim",
-		-- 	branch = "main",
-		-- 	dependencies = {
-		-- 		{ "nvim-lua/plenary.nvim", branch = "master" },
-		-- 		"github/copilot.vim",
-		-- 	},
-		-- 	config = function()
-		-- 		require("CopilotChat").setup({
-		-- 			debug = false,
-		--
-		-- 			window = {
-		-- 				layout = "float",
-		-- 				border = "single",
-		-- 				size = {
-		-- 					width = "80%",
-		-- 					height = "60%",
-		-- 				},
-		-- 				win_options = {
-		-- 					wrap = true,
-		-- 					linebreak = true,
-		-- 					foldcolumn = "0",
-		-- 					winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
-		-- 				},
-		-- 			},
-		-- 		})
-		--
-		-- 		local function set_keymaps()
-		-- 			vim.keymap.set("n", "<leader>cc", "<cmd>CopilotChat<cr>", { desc = "Open Copilot Chat" })
-		-- 			vim.keymap.set({ "n", "v" }, "<leader>ce", "<cmd>CopilotChatExplain<cr>", { desc = "Explain code" })
-		-- 			vim.keymap.set({ "n", "v" }, "<leader>cf", "<cmd>CopilotChatFix<cr>", { desc = "Fix code" })
-		-- 			vim.keymap.set(
-		-- 				{ "n", "v" },
-		-- 				"<leader>co",
-		-- 				"<cmd>CopilotChatOptimize<cr>",
-		-- 				{ desc = "Optimize code" }
-		-- 			)
-		-- 		end
-		--
-		-- 		set_keymaps()
-		-- 	end,
-		-- },
+
+		-- Copilot chat
+		{
+			"CopilotC-Nvim/CopilotChat.nvim",
+			branch = "main",
+			dependencies = {
+				{ "nvim-lua/plenary.nvim", branch = "master" },
+				"github/copilot.vim",
+			},
+			lazy = true,
+			keys = {
+				{ "<leader>cp", ":CopilotChat<CR>", desc = "Enable Copilot chat" },
+			},
+			config = function()
+				require("CopilotChat").setup({
+					debug = false,
+
+					window = {
+						layout = "float",
+						border = "single",
+						size = {
+							width = "80%",
+							height = "60%",
+						},
+						win_options = {
+							wrap = true,
+							linebreak = true,
+							foldcolumn = "0",
+							winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+						},
+					},
+				})
+
+				local function set_keymaps()
+					vim.keymap.set("n", "<leader>cc", "<cmd>CopilotChat<cr>", { desc = "Open Copilot Chat" })
+					vim.keymap.set({ "n", "v" }, "<leader>ce", "<cmd>CopilotChatExplain<cr>", { desc = "Explain code" })
+					vim.keymap.set({ "n", "v" }, "<leader>cf", "<cmd>CopilotChatFix<cr>", { desc = "Fix code" })
+					vim.keymap.set(
+						{ "n", "v" },
+						"<leader>co",
+						"<cmd>CopilotChatOptimize<cr>",
+						{ desc = "Optimize code" }
+					)
+				end
+
+				set_keymaps()
+			end,
+		},
+
+		-- -- Utils
+		-- Comment
+		{
+			"numToStr/Comment.nvim",
+			opts = {
+				toggler = {
+					line = "<leader>/",
+				},
+				opleader = {
+					line = "<leader>/",
+				},
+			},
+			keys = {
+				{ "<leader>/", mode = { "n", "v" } },
+			},
+		},
 	})
 end
 
