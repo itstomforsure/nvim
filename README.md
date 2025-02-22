@@ -1,5 +1,6 @@
 Dependencies:
+ - Lazy.nvim
+ - Mason.nvim
  - npm
- - typescript LSP package
- - angular LSP package
  - fzf
+ - minimap.vim (gotta build it first)
