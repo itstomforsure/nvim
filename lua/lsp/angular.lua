@@ -1,3 +1,5 @@
+local vim = vim
+
 local lsp_utils = require("lsp/utils")
 
 local fileTypes = { "html", "htmlangular" }
@@ -40,11 +42,13 @@ end
 
 local config = {
 	name = "angularls",
-	cmd = { 
-		"ngserver", 
-		"--stdio", 
-		"--tsProbeLocations", ts_lib_path,
-		"--ngProbeLocations", angular_language_server_path 
+	cmd = {
+		"ngserver",
+		"--stdio",
+		"--tsProbeLocations",
+		ts_lib_path,
+		"--ngProbeLocations",
+		angular_language_server_path,
 	},
 	filetypes = fileTypes,
 	root_dir = lsp_utils.find_project_root,
@@ -55,9 +59,9 @@ local config = {
 			lint = true,
 			suggest = {
 				includeCompletionsWithInsertText = true,
-				includeCompletionsForModuleExports = true
-			}
-		}
+				includeCompletionsForModuleExports = true,
+			},
+		},
 	},
 	capabilities = vim.lsp.protocol.make_client_capabilities(),
 }
@@ -67,8 +71,10 @@ vim.api.nvim_create_autocmd("FileType", {
 	callback = function()
 		local root_dir = lsp_utils.find_project_root()
 
-		if vim.fn.filereadable(root_dir .. "/angular.json") == 1 or
-			vim.fn.filereadable(root_dir .. "/project.json") == 1 then
+		if
+			vim.fn.filereadable(root_dir .. "/angular.json") == 1
+			or vim.fn.filereadable(root_dir .. "/project.json") == 1
+		then
 			local existing_clients = vim.lsp.get_clients({ bufnr = 0, name = "angularls" })
 			if #existing_clients == 0 then
 				vim.lsp.start(config)

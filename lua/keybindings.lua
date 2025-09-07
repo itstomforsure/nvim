@@ -1,5 +1,6 @@
+local vim = vim
+
 -- General keybindings
--- vim.keymap.set({ "n", "t" }, ";", ":")
 vim.keymap.set("n", "<C-q>", ":qa<CR>")
 
 -- Save on Ctrl+s in normal and insert and visual modes

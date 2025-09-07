@@ -1,7 +1,9 @@
-local error_window = require("error_window")
-error_window.setup()
+local vim = vim
 
 vim.notify = require("notify").notify
+
+local error_window = require("error_window")
+error_window.setup()
 
 local cmdline = require("cmdline")
 cmdline.setup()
@@ -25,7 +27,7 @@ require("lazy").setup({
 		"nvim-treesitter/nvim-treesitter",
 		branch = "master",
 		lazy = false,
-		build = ":TSUpdate"
+		build = ":TSUpdate",
 	},
 
 	-- Telescope
@@ -36,19 +38,19 @@ require("lazy").setup({
 			{
 				"nvim-telescope/telescope-fzf-native.nvim",
 				build = "make",
-			}
+			},
 		},
 		keys = {
 			{ "<leader>ff", "<cmd>Telescope find_files<cr>" },
 			{ "<leader>fg", "<cmd>Telescope live_grep<cr>" },
 			{ "<leader>fr", "<cmd>Telescope lsp_references<cr>" },
 			{ "<leader>fb", "<cmd>Telescope buffers<cr>" },
-			{ "<leader>fh", "<cmd>Telescope help_tags<cr>" }
+			{ "<leader>fh", "<cmd>Telescope help_tags<cr>" },
 		},
 		config = function()
 			local telescope = require("telescope")
 			pcall(telescope.load_extension, "fzf")
-		end
+		end,
 	},
 
 	-- Comment
@@ -56,15 +58,15 @@ require("lazy").setup({
 		"numToStr/Comment.nvim",
 		opts = {
 			toggler = {
-				line = "<leader>/"
+				line = "<leader>/",
 			},
 			opleader = {
-				line = "<leader>/"
-			}
+				line = "<leader>/",
+			},
 		},
 		keys = {
-			{ "<leader>/", mode = { "n", "v" } }
-		}
+			{ "<leader>/", mode = { "n", "v" } },
+		},
 	},
 
 	-- Explorer
@@ -83,8 +85,8 @@ require("lazy").setup({
 				side = "left",
 				adaptive_size = false,
 				number = false,
-			}
-		}
+			},
+		},
 	},
 
 	-- Linting
@@ -93,6 +95,8 @@ require("lazy").setup({
 		config = function()
 			local lint = require("lint")
 			lint.linters_by_ft = {
+				lua = { "luacheck" },
+				go = { "golangci-lint" },
 				javascript = { "eslint_d" },
 				javascriptreact = { "eslint_d" },
 				typescript = { "eslint_d" },
@@ -104,7 +108,7 @@ require("lazy").setup({
 					require("lint").try_lint()
 				end,
 			})
-		end
+		end,
 	},
 
 	-- Formatting
@@ -112,6 +116,8 @@ require("lazy").setup({
 		"stevearc/conform.nvim",
 		opts = {
 			formatters_by_ft = {
+				lua = { "stylua" },
+				go = { "gofumpt", "goimports" },
 				javascript = { "prettierd", "prettier" },
 				javascriptreact = { "prettierd", "prettier" },
 				typescript = { "prettierd", "prettier" },
@@ -235,19 +241,19 @@ require("lazy").setup({
 			"LazyGitConfig",
 			"LazyGitCurrentFile",
 			"LazyGitFilter",
-			"LazyGitFilterCurrentFile"
+			"LazyGitFilterCurrentFile",
 		},
 		dependencies = {
-			"nvim-lua/plenary.nvim"
+			"nvim-lua/plenary.nvim",
 		},
 		keys = {
-			{ "<leader>gg", ":LazyGit<cr>" }
-		}
+			{ "<leader>gg", ":LazyGit<cr>" },
+		},
 	},
 
 	-- Copilot
 	{
-		"github/copilot.vim"
+		"github/copilot.vim",
 	},
 
 	-- Copilot Chat
@@ -257,6 +263,5 @@ require("lazy").setup({
 			"nvim-lua/plenary.nvim",
 		},
 		build = "make tiktoken",
-	}
+	},
 })
-

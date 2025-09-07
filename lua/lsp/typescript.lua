@@ -1,3 +1,5 @@
+local vim = vim
+
 local lsp_utils = require("lsp/utils")
 
 local fileTypes = { "javascript", "javascriptreact", "typescript", "typescriptreact" }
@@ -55,7 +57,7 @@ local config = {
 			updateImportsOnFileMove = { enabled = "always" },
 			suggest = {
 				completionsForModuleExports = true,
-				autoImports = true
+				autoImports = true,
 			},
 			preferences = {
 				importModuleSpecifier = "relative",
@@ -87,7 +89,7 @@ vim.api.nvim_create_autocmd("FileType", {
 	callback = function()
 		local root_dir = lsp_utils.find_project_root()
 		local project_configs = lsp_utils.detect_project_configs(root_dir)
-		
+
 		-- Update TypeScript settings based on project configuration
 		if project_configs.prettier then
 			config.settings.typescript.preferences.insertSpaceAfterCommaDelimiter = false
@@ -102,14 +104,14 @@ vim.api.nvim_create_autocmd("FileType", {
 			config.settings.typescript.preferences.insertSpaceAfterKeywordsInControlFlowStatements = true
 			config.settings.typescript.preferences.insertSpaceAfterFunctionKeywordForAnonymousFunctions = true
 		end
-		
+
 		config.settings.typescript.preferences.insertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis = false
 		config.settings.typescript.preferences.insertSpaceAfterOpeningAndBeforeClosingNonemptyBrackets = false
-		
+
 		-- ESLint configuration
 		config.settings.typescript.validate = { enable = project_configs.eslint }
 		config.settings.javascript.validate = { enable = project_configs.eslint }
-		
+
 		if project_configs.eslint then
 			config.settings.eslint = {
 				enable = true,
@@ -128,4 +130,3 @@ vim.api.nvim_create_autocmd("FileType", {
 		end
 	end,
 })
-

@@ -1,3 +1,5 @@
+local vim = vim
+
 local M = {}
 
 function M.lsp_exists(server)
@@ -34,17 +36,17 @@ end
 function M.detect_project_configs(root_dir)
 	local configs = {
 		editorconfig = vim.fn.filereadable(root_dir .. "/.editorconfig") == 1,
-		eslint = vim.fn.filereadable(root_dir .. "/.eslintrc.json") == 1 or
-			vim.fn.filereadable(root_dir .. "/.eslintrc.js") == 1 or
-			vim.fn.filereadable(root_dir .. "/.eslintrc.yaml") == 1 or
-			vim.fn.filereadable(root_dir .. "/.eslintrc.yml") == 1 or
-			vim.fn.filereadable(root_dir .. "/eslint.config.js") == 1,
-		prettier = vim.fn.filereadable(root_dir .. "/.prettierrc") == 1 or
-			vim.fn.filereadable(root_dir .. "/.prettierrc.json") == 1 or
-			vim.fn.filereadable(root_dir .. "/.prettierrc.js") == 1 or
-			vim.fn.filereadable(root_dir .. "/.prettierrc.yaml") == 1 or
-			vim.fn.filereadable(root_dir .. "/.prettierrc.yml") == 1 or
-			vim.fn.filereadable(root_dir .. "/prettier.config.js") == 1,
+		eslint = vim.fn.filereadable(root_dir .. "/.eslintrc.json") == 1 or vim.fn.filereadable(
+			root_dir .. "/.eslintrc.js"
+		) == 1 or vim.fn.filereadable(root_dir .. "/.eslintrc.yaml") == 1 or vim.fn.filereadable(
+			root_dir .. "/.eslintrc.yml"
+		) == 1 or vim.fn.filereadable(root_dir .. "/eslint.config.js") == 1,
+		prettier = vim.fn.filereadable(root_dir .. "/.prettierrc") == 1
+			or vim.fn.filereadable(root_dir .. "/.prettierrc.json") == 1
+			or vim.fn.filereadable(root_dir .. "/.prettierrc.js") == 1
+			or vim.fn.filereadable(root_dir .. "/.prettierrc.yaml") == 1
+			or vim.fn.filereadable(root_dir .. "/.prettierrc.yml") == 1
+			or vim.fn.filereadable(root_dir .. "/prettier.config.js") == 1,
 	}
 
 	return configs

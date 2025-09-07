@@ -1,3 +1,5 @@
+local vim = vim
+
 -- Main setup function
 local root_dir = require("lsp/utils").find_project_root()
 
@@ -9,10 +11,10 @@ if vim.fn.filereadable(editorconfig_file) == 1 then
 end
 
 -- Setup LSP handlers and diagnostics
-vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover,
-	{ border = "rounded", max_width = 80, max_height = 20 })
-vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help,
-	{ border = "rounded", max_width = 80, max_height = 20 })
+vim.lsp.handlers["textDocument/hover"] =
+	vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded", max_width = 80, max_height = 20 })
+vim.lsp.handlers["textDocument/signatureHelp"] =
+	vim.lsp.with(vim.lsp.handlers.signature_help, { border = "rounded", max_width = 80, max_height = 20 })
 
 vim.diagnostic.config({
 	virtual_text = {
@@ -35,9 +37,9 @@ vim.diagnostic.config({
 
 local signs = {
 	{ name = "DiagnosticSignError", text = "x" },
-	{ name = "DiagnosticSignWarn",  text = "!" },
-	{ name = "DiagnosticSignHint",  text = "?" },
-	{ name = "DiagnosticSignInfo",  text = "i" },
+	{ name = "DiagnosticSignWarn", text = "!" },
+	{ name = "DiagnosticSignHint", text = "?" },
+	{ name = "DiagnosticSignInfo", text = "i" },
 }
 
 for _, sign in pairs(signs) do
@@ -115,4 +117,3 @@ for _, module in ipairs(vim.fn.readdir(config_path)) do
 		end
 	end
 end
-

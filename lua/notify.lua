@@ -7,20 +7,20 @@ local notify_active = {}
 local notify_heights = {}
 
 local function wrap_text(text, max_width)
-  local lines = {}
-  for line in text:gmatch("[^\n]+") do
-    while #line > max_width do
-      table.insert(lines, line:sub(1, max_width))
-      line = line:sub(max_width + 1)
-    end
-    table.insert(lines, line)
-  end
-  return lines
+	local lines = {}
+	for line in text:gmatch("[^\n]+") do
+		while #line > max_width do
+			table.insert(lines, line:sub(1, max_width))
+			line = line:sub(max_width + 1)
+		end
+		table.insert(lines, line)
+	end
+	return lines
 end
 
 function M.notify(msg, level)
 	level = level or 2
-	duration = 3000
+	local duration = 3000
 
 	local icons = {
 		[0] = "T",
@@ -28,6 +28,8 @@ function M.notify(msg, level)
 		[2] = " ",
 		[3] = " ",
 		[4] = " ",
+		[5] = "P",
+		[6] = "E",
 	}
 
 	local labels = {
@@ -36,6 +38,8 @@ function M.notify(msg, level)
 		[2] = "Info",
 		[3] = "Warning",
 		[4] = "Error",
+		[5] = "Print",
+		[6] = "Echo",
 	}
 
 	local hl = {
@@ -44,6 +48,8 @@ function M.notify(msg, level)
 		[2] = "DiagnosticInfo",
 		[3] = "DiagnosticWarn",
 		[4] = "DiagnosticError",
+		[5] = "DiagnosticInfo",
+		[6] = "DiagnosticInfo",
 	}
 
 	local time = os.date("%H:%M:%S")
@@ -81,7 +87,11 @@ function M.notify(msg, level)
 	}
 
 	local win = vim.api.nvim_open_win(buf, false, opts)
-	vim.api.nvim_win_set_option(win, "winhl", "Normal:NotifyBackground,NormalFloat:NotifyBackground,FloatBorder:" .. hl[level])
+	vim.api.nvim_win_set_option(
+		win,
+		"winhl",
+		"Normal:NotifyBackground,NormalFloat:NotifyBackground,FloatBorder:" .. hl[level]
+	)
 	vim.api.nvim_win_set_option(win, "winblend", 10)
 
 	table.insert(notify_active, win)
@@ -92,13 +102,74 @@ function M.notify(msg, level)
 			vim.api.nvim_win_close(win, true)
 		end
 		for i, w in ipairs(notify_active) do
-		  if w == win then
-			table.remove(notify_active, i)
-            table.remove(notify_heights, i)
-			break
-		  end
+			if w == win then
+				table.remove(notify_active, i)
+				table.remove(notify_heights, i)
+				break
+			end
 		end
 	end, duration)
+end
+
+-- Override print function
+-- local original_print = print
+_G.print = function(...)
+	local args = { ... }
+	local msg = ""
+	for i, v in ipairs(args) do
+		if i > 1 then
+			msg = msg .. "\t"
+		end
+		msg = msg .. tostring(v)
+	end
+
+	if msg and msg ~= "" then
+		M.notify(msg, 5)
+	end
+
+	-- original_print(...) -- Call original print if needed
+end
+
+-- Override vim.api.nvim_echo to capture echo commands
+-- local original_echo = vim.api.nvim_echo
+vim.api.nvim_echo = function(chunks, _, _)
+	local msg = ""
+	for _, chunk in ipairs(chunks) do
+		if type(chunk) == "table" then
+			msg = msg .. chunk[1]
+		else
+			msg = msg .. tostring(chunk)
+		end
+	end
+
+	if msg and msg ~= "" and not msg:match("^%s*$") then
+		M.notify(msg, 6)
+	end
+
+	-- original_echo(chunks, history, opts) -- Call original echo if needed
+end
+
+-- Capture file write messages
+vim.api.nvim_create_autocmd("BufWritePost", {
+	callback = function()
+		local filename = vim.fn.expand("%:t")
+		local lines = vim.api.nvim_buf_line_count(0)
+		local size = vim.fn.getfsize(vim.fn.expand("%:p"))
+
+		M.notify(string.format('"%s" %dL, %dB written', filename, lines, size), vim.log.levels.INFO)
+	end,
+})
+
+-- Capture LSP messages
+vim.lsp.handlers["window/showMessage"] = function(_, result, _)
+	local level_map = {
+		[1] = vim.log.levels.ERROR,
+		[2] = vim.log.levels.WARN,
+		[3] = vim.log.levels.INFO,
+		[4] = vim.log.levels.INFO,
+	}
+
+	M.notify(result.message, level_map[result.type] or vim.log.levels.INFO)
 end
 
 return M
