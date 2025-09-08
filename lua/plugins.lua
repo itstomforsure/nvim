@@ -28,6 +28,51 @@ require("lazy").setup({
 		branch = "master",
 		lazy = false,
 		build = ":TSUpdate",
+		config = function()
+			require("nvim-treesitter.configs").setup({
+				ensure_installed = {
+					"lua",
+					"typescript",
+					"javascript",
+					"html",
+					"css",
+					"go",
+					"gomod",
+					"gosum",
+					"gowork",
+					"json",
+					"bash",
+					"vim",
+					"markdown",
+					"markdown_inline",
+					"regex",
+					"yaml",
+					"toml",
+					"query",
+					"gitignore",
+				},
+				auto_install = true,
+				highlight = {
+					enable = true,
+					additional_vim_regex_highlighting = false,
+				},
+				indent = { enable = true },
+				incremental_selection = {
+					enable = true,
+					keymaps = {
+						init_selection = "gnn", -- start selection
+						node_incremental = "grn", -- expand
+						scope_incremental = "grc", -- expand scope
+						node_decremental = "grm", -- shrink
+					},
+				},
+				rainbow = {
+					enable = true,
+					extended_mode = true, -- e.g. <>
+					max_file_lines = nil,
+				},
+			})
+		end,
 	},
 
 	-- Telescope
