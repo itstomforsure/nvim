@@ -8,6 +8,9 @@ error_window.setup()
 local cmdline = require("cmdline")
 cmdline.setup()
 
+local search = require("search")
+search.setup()
+
 local lazy_path = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazy_path) then
 	vim.fn.system({
@@ -68,7 +71,7 @@ require("lazy").setup({
 				},
 				rainbow = {
 					enable = true,
-					extended_mode = true, -- e.g. <>
+					extended_mode = true, -- also highlight non-bracket delimiters like <>
 					max_file_lines = nil,
 				},
 			})

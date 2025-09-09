@@ -68,8 +68,10 @@ function M.notify(msg, level)
 	vim.list_extend(lines, wrapped_msg)
 
 	local buf = vim.api.nvim_create_buf(false, true)
+	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	vim.api.nvim_buf_add_highlight(buf, -1, hl[level], 0, 0, -1)
+	vim.bo[buf].modifiable = false
 
 	local row = 1
 	for _, height in ipairs(notify_heights) do

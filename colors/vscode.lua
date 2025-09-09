@@ -214,8 +214,8 @@ set(0, "GitSignsDelete", { fg = "#94151b" })
 -- These might need adjustment based on your treesitter queries
 set(0, "@keyword.modifier.typescript", { fg = colors.keyword_blue }) -- for public, private, protected
 set(0, "@keyword.modifier.javascript", { fg = colors.keyword_blue })
-set(0, "@punctuation.bracket.typescript", { fg = colors.func }) -- for {} and ()
-set(0, "@punctuation.bracket.javascript", { fg = colors.func })
+set(0, "@punctuation.bracket.typescript", { fg = colors.keyword }) -- for {} and ()
+set(0, "@punctuation.bracket.javascript", { fg = colors.keyword })
 
 -- Special: Override for array brackets to be yellow
 -- Note: This might require custom treesitter queries to distinguish [] from other brackets

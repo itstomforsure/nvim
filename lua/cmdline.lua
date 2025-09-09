@@ -34,13 +34,13 @@ local function create_cmdline_buf()
 		return cmdline_buf
 	end
 	local buf = vim.api.nvim_create_buf(false, true)
-	vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-	vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "wipe"
 
 	return buf
 end
 
-local function create_cmdline_win()
+local function create_cmdline_win(buf)
 	if cmdline_win and vim.api.nvim_win_is_valid(cmdline_win) then
 		return
 	end
@@ -60,10 +60,10 @@ local function create_cmdline_win()
 		border = "rounded",
 	}
 
-	local win = vim.api.nvim_open_win(cmdline_buf, true, opts)
+	local win = vim.api.nvim_open_win(buf, true, opts)
 	vim.api.nvim_win_set_option(win, "winhl", "Normal:Normal,FloatBorder:DiagnosticInfo")
 	vim.api.nvim_win_set_option(win, "winblend", 10)
-	vim.api.nvim_win_set_option(win, "statuscolumn", "#" .. current_history_idx .. " : ") -- 🖥️
+	vim.api.nvim_win_set_option(win, "statuscolumn", "#" .. current_history_idx .. " : ")
 
 	return win
 end
@@ -75,23 +75,29 @@ local function create_history_buf(history)
 	end
 
 	if history_buf and vim.api.nvim_buf_is_valid(history_buf) then
-		vim.api.nvim_buf_set_option(history_buf, "modifiable", true)
+		vim.bo[history_buf].modifiable = true
 		vim.api.nvim_buf_set_lines(history_buf, 0, -1, false, display_lines)
-		vim.api.nvim_buf_set_option(history_buf, "modifiable", false)
+		vim.bo[history_buf].modifiable = false
+
 		return history_buf
 	end
 
 	local buf = vim.api.nvim_create_buf(false, true)
-	vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-	vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "wipe"
+	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, display_lines)
-	vim.api.nvim_buf_set_option(buf, "modifiable", false)
+	vim.bo[buf].modifiable = false
 
 	return buf
 end
 
 local function update_history_highlight()
 	if not history_buf or not vim.api.nvim_buf_is_valid(history_buf) then
+		return
+	end
+
+	if not cmdline_win or not vim.api.nvim_win_is_valid(cmdline_win) then
 		return
 	end
 
@@ -135,9 +141,9 @@ local function update_cmdline_content()
 		content = history_list[current_history_idx].cmd
 	end
 
-	vim.api.nvim_buf_set_option(cmdline_buf, "modifiable", true)
+	vim.bo[cmdline_buf].modifiable = true
 	vim.api.nvim_buf_set_lines(cmdline_buf, 0, -1, false, { content })
-	vim.api.nvim_buf_set_option(cmdline_buf, "modifiable", true)
+	vim.bo[cmdline_buf].modifiable = false
 
 	-- Move cursor to end of line
 	if cmdline_win and vim.api.nvim_win_is_valid(cmdline_win) then
@@ -151,17 +157,24 @@ local function create_history_win(history)
 		return
 	end
 
-	local cmdline_config = vim.api.nvim_win_get_config(cmdline_win)
-	local width = cmdline_config.width
-	local height = math.max(1, #history)
-	local row = cmdline_config.row - height - 1 -- above cmdline; cmdline_config.row + 2 -- below cmdline
+	if not history_buf or not vim.api.nvim_buf_is_valid(history_buf) then
+		return
+	end
 
+	if not cmdline_win or not vim.api.nvim_win_is_valid(cmdline_win) then
+		return
+	end
+
+	local config = vim.api.nvim_win_get_config(cmdline_win)
+	if not config then
+		return
+	end
 	local win = vim.api.nvim_open_win(history_buf, false, {
 		relative = "editor",
-		width = width,
-		height = height,
-		row = row,
-		col = cmdline_config.col,
+		width = config.width,
+		height = #history,
+		row = config.row - #history - 1,
+		col = config.col,
 		style = "minimal",
 		border = "rounded",
 	})
@@ -199,6 +212,10 @@ local function close()
 end
 
 local function navigate_history(direction)
+	if not cmdline_buf or not vim.api.nvim_buf_is_valid(cmdline_buf) then
+		return
+	end
+
 	if #history_list == 0 then
 		return
 	end
@@ -210,7 +227,7 @@ local function navigate_history(direction)
 	elseif direction == "down" and current_history_idx == 1 then
 		-- Go to empty command line
 		current_history_idx = 0
-		vim.api.nvim_buf_set_option(cmdline_buf, "modifiable", true)
+		vim.bo[cmdline_buf].modifiable = true
 		vim.api.nvim_buf_set_lines(cmdline_buf, 0, -1, false, { "" })
 		if cmdline_win and vim.api.nvim_win_is_valid(cmdline_win) then
 			vim.api.nvim_win_set_cursor(cmdline_win, { 1, 0 })
@@ -240,42 +257,36 @@ local function open_history_win()
 	history_win = create_history_win(history_list)
 end
 
-local function setup_cmdline_keymaps()
-	local opts_keymap = { buffer = cmdline_buf, silent = true }
+local function open_cmdline_win()
+	cmdline_buf = create_cmdline_buf()
+	cmdline_win = create_cmdline_win(cmdline_buf)
 
-	-- Enter to execute command
+	local opts = { buffer = cmdline_buf, silent = true }
+
 	vim.keymap.set("i", "<CR>", function()
 		local line = vim.api.nvim_get_current_line()
 		close()
 		if line ~= "" then
 			vim.cmd(line)
 		end
-	end, opts_keymap)
+	end, opts)
 
-	-- Escape to close
 	vim.keymap.set("i", "<Esc>", function()
 		close()
-	end, opts_keymap)
+	end, opts)
 
-	-- Up/Down to navigate history - ONLY when cmdline window is focused
 	vim.keymap.set("i", "<Up>", function()
 		if not history_win or not vim.api.nvim_win_is_valid(history_win) then
 			open_history_win()
 		end
 		navigate_history("up")
-	end, opts_keymap)
+	end, opts)
 
 	vim.keymap.set("i", "<Down>", function()
 		navigate_history("down")
-	end, opts_keymap)
-end
-
-local function open_cmdline_win()
-	cmdline_buf = create_cmdline_buf()
-	cmdline_win = create_cmdline_win()
+	end, opts)
 
 	vim.cmd("startinsert")
-	setup_cmdline_keymaps()
 end
 
 function M.setup()
