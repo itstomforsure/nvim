@@ -1,7 +1,7 @@
 local vim = vim
 
 -- General keybindings
-vim.keymap.set("n", "<C-q>", ":qa<CR>")
+vim.keymap.set("n", "<C-q>", ":qa!<CR>")
 
 -- Save on Ctrl+s in normal and insert and visual modes
 vim.keymap.set("n", "<C-s>", ":wa<CR>")
@@ -51,10 +51,10 @@ vim.keymap.set("n", "<leader>gg", ":LazyGit<CR>")
 vim.keymap.set("n", "<leader>c", function()
 	if vim.g.copilot_enabled == true then
 		vim.g.copilot_enabled = false
-		print("Copilot Disabled")
+		vim.notify("Copilot Disabled", vim.log.levels.WARN)
 	else
 		vim.g.copilot_enabled = true
-		print("Copilot Enabled")
+		vim.notify("Copilot Enabled", vim.log.levels.WARN)
 	end
 end)
 

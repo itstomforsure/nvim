@@ -1,10 +1,11 @@
 local vim = vim
 local M = {}
+local state = {
+	notify_active = {},
+	notify_heights = {},
+}
 
 vim.cmd("highlight NotifyBackground guibg=transparent guifg=#ffffff")
-
-local notify_active = {}
-local notify_heights = {}
 
 local function wrap_text(text, max_width)
 	local lines = {}
@@ -74,7 +75,7 @@ function M.notify(msg, level)
 	vim.bo[buf].modifiable = false
 
 	local row = 1
-	for _, height in ipairs(notify_heights) do
+	for _, height in ipairs(state.notify_heights) do
 		row = row + height + 2
 	end
 
@@ -96,17 +97,17 @@ function M.notify(msg, level)
 	)
 	vim.api.nvim_win_set_option(win, "winblend", 10)
 
-	table.insert(notify_active, win)
-	table.insert(notify_heights, #lines)
+	table.insert(state.notify_active, win)
+	table.insert(state.notify_heights, #lines)
 
 	vim.defer_fn(function()
 		if vim.api.nvim_win_is_valid(win) then
 			vim.api.nvim_win_close(win, true)
 		end
-		for i, w in ipairs(notify_active) do
+		for i, w in ipairs(state.notify_active) do
 			if w == win then
-				table.remove(notify_active, i)
-				table.remove(notify_heights, i)
+				table.remove(state.notify_active, i)
+				table.remove(state.notify_heights, i)
 				break
 			end
 		end

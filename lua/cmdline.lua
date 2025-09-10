@@ -1,14 +1,13 @@
 local vim = vim
 local M = {}
-
-local cmdline_buf = nil
-local cmdline_win = nil
-
-local history_buf = nil
-local history_win = nil
-
-local current_history_idx = 0
-local history_list = {}
+local state = {
+	cmdline_buf = nil,
+	cmdline_win = nil,
+	history_buf = nil,
+	history_win = nil,
+	current_history_idx = 0,
+	history_list = {},
+}
 
 local function get_all_history()
 	local history = {}
@@ -30,9 +29,10 @@ local function get_all_history()
 end
 
 local function create_cmdline_buf()
-	if cmdline_buf and vim.api.nvim_buf_is_valid(cmdline_buf) then
-		return cmdline_buf
+	if state.cmdline_buf and vim.api.nvim_buf_is_valid(state.cmdline_buf) then
+		return state.cmdline_buf
 	end
+
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].bufhidden = "wipe"
@@ -41,13 +41,13 @@ local function create_cmdline_buf()
 end
 
 local function create_cmdline_win(buf)
-	if cmdline_win and vim.api.nvim_win_is_valid(cmdline_win) then
+	if state.cmdline_win and vim.api.nvim_win_is_valid(state.cmdline_win) then
 		return
 	end
 
 	local width = math.min(80, vim.o.columns - 10)
 	local height = 1
-	local row = 45
+	local row = math.floor((vim.o.lines - height) * 0.8)
 	local col = math.floor((vim.o.columns - width) / 2)
 
 	local opts = {
@@ -63,7 +63,7 @@ local function create_cmdline_win(buf)
 	local win = vim.api.nvim_open_win(buf, true, opts)
 	vim.api.nvim_win_set_option(win, "winhl", "Normal:Normal,FloatBorder:DiagnosticInfo")
 	vim.api.nvim_win_set_option(win, "winblend", 10)
-	vim.api.nvim_win_set_option(win, "statuscolumn", "#" .. current_history_idx .. " : ")
+	vim.api.nvim_win_set_option(win, "statuscolumn", " ꩜ : ") -- ꩜  → ☯ ᶠᶸᶜᵏᵧₒᵤ! ∞
 
 	return win
 end
@@ -74,12 +74,12 @@ local function create_history_buf(history)
 		table.insert(display_lines, history[i].display)
 	end
 
-	if history_buf and vim.api.nvim_buf_is_valid(history_buf) then
-		vim.bo[history_buf].modifiable = true
-		vim.api.nvim_buf_set_lines(history_buf, 0, -1, false, display_lines)
-		vim.bo[history_buf].modifiable = false
+	if state.history_buf and vim.api.nvim_buf_is_valid(state.history_buf) then
+		vim.bo[state.history_buf].modifiable = true
+		vim.api.nvim_buf_set_lines(state.history_buf, 0, -1, false, display_lines)
+		vim.bo[state.history_buf].modifiable = false
 
-		return history_buf
+		return state.history_buf
 	end
 
 	local buf = vim.api.nvim_create_buf(false, true)
@@ -93,37 +93,46 @@ local function create_history_buf(history)
 end
 
 local function update_history_highlight()
-	if not history_buf or not vim.api.nvim_buf_is_valid(history_buf) then
+	if not state.history_buf or not vim.api.nvim_buf_is_valid(state.history_buf) then
 		return
 	end
 
-	if not cmdline_win or not vim.api.nvim_win_is_valid(cmdline_win) then
+	if not state.cmdline_win or not vim.api.nvim_win_is_valid(state.cmdline_win) then
 		return
 	end
 
 	-- Clear existing highlights
-	vim.api.nvim_buf_clear_namespace(history_buf, -1, 0, -1)
+	vim.api.nvim_buf_clear_namespace(state.history_buf, -1, 0, -1)
 
 	-- Highlight current selection
-	if current_history_idx > 0 and current_history_idx <= #history_list then
-		local line_idx = #history_list - current_history_idx
-		vim.api.nvim_buf_add_highlight(history_buf, -1, "Visual", line_idx, 0, -1)
-		vim.api.nvim_win_set_option(cmdline_win, "statuscolumn", "#" .. current_history_idx .. " : ")
+	if state.current_history_idx == 0 then
+		vim.api.nvim_win_set_option(state.cmdline_win, "statuscolumn", " ꩜ : ")
+		return
+	end
+	if state.current_history_idx > 0 and state.current_history_idx <= #state.history_list then
+		local line_idx = #state.history_list - state.current_history_idx
+		vim.api.nvim_buf_add_highlight(state.history_buf, -1, "Visual", line_idx, 0, -1)
+
+		if state.current_history_idx < 10 then
+			vim.api.nvim_win_set_option(state.cmdline_win, "statuscolumn", "#" .. state.current_history_idx .. " : ")
+		else
+			vim.api.nvim_win_set_option(state.cmdline_win, "statuscolumn", "#" .. state.current_history_idx .. ": ")
+		end
 
 		-- Ensure the highlighted line is visible
-		if history_win and vim.api.nvim_win_is_valid(history_win) then
-			local win_height = vim.api.nvim_win_get_height(history_win)
+		if state.history_win and vim.api.nvim_win_is_valid(state.history_win) then
+			local win_height = vim.api.nvim_win_get_height(state.history_win)
 			local line_to_show = line_idx
 
 			-- Get current view
-			local view = vim.api.nvim_win_call(history_win, function()
+			local view = vim.api.nvim_win_call(state.history_win, function()
 				return vim.fn.winsaveview()
 			end)
 
 			-- Scroll if necessary
 			if line_to_show < view.topline or line_to_show >= view.topline + win_height then
 				view.topline = math.max(0, line_to_show - math.floor(win_height / 2))
-				vim.api.nvim_win_call(history_win, function()
+				vim.api.nvim_win_call(state.history_win, function()
 					vim.fn.winrestview(view)
 				end)
 			end
@@ -132,44 +141,44 @@ local function update_history_highlight()
 end
 
 local function update_cmdline_content()
-	if not cmdline_buf or not vim.api.nvim_buf_is_valid(cmdline_buf) then
+	if not state.cmdline_buf or not vim.api.nvim_buf_is_valid(state.cmdline_buf) then
 		return
 	end
 
 	local content = ""
-	if current_history_idx > 0 and current_history_idx <= #history_list then
-		content = history_list[current_history_idx].cmd
+	if state.current_history_idx > 0 and state.current_history_idx <= #state.history_list then
+		content = state.history_list[state.current_history_idx].cmd
 	end
 
-	vim.bo[cmdline_buf].modifiable = true
-	vim.api.nvim_buf_set_lines(cmdline_buf, 0, -1, false, { content })
-	vim.bo[cmdline_buf].modifiable = false
+	vim.bo[state.cmdline_buf].modifiable = true
+	vim.api.nvim_buf_set_lines(state.cmdline_buf, 0, -1, false, { content })
+	vim.bo[state.cmdline_buf].modifiable = false
 
 	-- Move cursor to end of line
-	if cmdline_win and vim.api.nvim_win_is_valid(cmdline_win) then
-		vim.api.nvim_win_set_cursor(cmdline_win, { 1, #content })
+	if state.cmdline_win and vim.api.nvim_win_is_valid(state.cmdline_win) then
+		vim.api.nvim_win_set_cursor(state.cmdline_win, { 1, #content })
 	end
 end
 
 local function create_history_win(history)
-	if history_win and vim.api.nvim_win_is_valid(history_win) then
+	if state.history_win and vim.api.nvim_win_is_valid(state.history_win) then
 		update_history_highlight()
 		return
 	end
 
-	if not history_buf or not vim.api.nvim_buf_is_valid(history_buf) then
+	if not state.history_buf or not vim.api.nvim_buf_is_valid(state.history_buf) then
 		return
 	end
 
-	if not cmdline_win or not vim.api.nvim_win_is_valid(cmdline_win) then
+	if not state.cmdline_win or not vim.api.nvim_win_is_valid(state.cmdline_win) then
 		return
 	end
 
-	local config = vim.api.nvim_win_get_config(cmdline_win)
+	local config = vim.api.nvim_win_get_config(state.cmdline_win)
 	if not config then
 		return
 	end
-	local win = vim.api.nvim_open_win(history_buf, false, {
+	local win = vim.api.nvim_open_win(state.history_buf, false, {
 		relative = "editor",
 		width = config.width,
 		height = #history,
@@ -183,7 +192,7 @@ local function create_history_win(history)
 	vim.api.nvim_win_set_option(win, "winblend", 10)
 
 	-- Initialize selection to first item
-	if #history > 0 and current_history_idx == 0 then
+	if #history > 0 and state.current_history_idx == 0 then
 		update_cmdline_content()
 	end
 
@@ -193,44 +202,43 @@ local function create_history_win(history)
 end
 
 local function close()
-	if cmdline_win and vim.api.nvim_win_is_valid(cmdline_win) then
-		vim.api.nvim_win_close(cmdline_win, true)
-		cmdline_buf = nil
-		cmdline_win = nil
+	if state.cmdline_win and vim.api.nvim_win_is_valid(state.cmdline_win) then
+		vim.api.nvim_win_close(state.cmdline_win, true)
+		state.cmdline_buf = nil
+		state.cmdline_win = nil
 	end
 
-	if history_win and vim.api.nvim_win_is_valid(history_win) then
-		vim.api.nvim_win_close(history_win, true)
-		history_buf = nil
-		history_win = nil
+	if state.history_win and vim.api.nvim_win_is_valid(state.history_win) then
+		vim.api.nvim_win_close(state.history_win, true)
+		state.history_buf = nil
+		state.history_win = nil
+		state.current_history_idx = 0
+		state.history_list = {}
 	end
-
-	current_history_idx = 0
-	history_list = {}
 
 	vim.cmd("stopinsert")
 end
 
 local function navigate_history(direction)
-	if not cmdline_buf or not vim.api.nvim_buf_is_valid(cmdline_buf) then
+	if not state.cmdline_buf or not vim.api.nvim_buf_is_valid(state.cmdline_buf) then
 		return
 	end
 
-	if #history_list == 0 then
+	if #state.history_list == 0 then
 		return
 	end
 
-	if direction == "up" and current_history_idx < #history_list then
-		current_history_idx = current_history_idx + 1
-	elseif direction == "down" and current_history_idx > 1 then
-		current_history_idx = current_history_idx - 1
-	elseif direction == "down" and current_history_idx == 1 then
+	if direction == "up" and state.current_history_idx < #state.history_list then
+		state.current_history_idx = state.current_history_idx + 1
+	elseif direction == "down" and state.current_history_idx > 1 then
+		state.current_history_idx = state.current_history_idx - 1
+	elseif direction == "down" and state.current_history_idx == 1 then
 		-- Go to empty command line
-		current_history_idx = 0
-		vim.bo[cmdline_buf].modifiable = true
-		vim.api.nvim_buf_set_lines(cmdline_buf, 0, -1, false, { "" })
-		if cmdline_win and vim.api.nvim_win_is_valid(cmdline_win) then
-			vim.api.nvim_win_set_cursor(cmdline_win, { 1, 0 })
+		state.current_history_idx = 0
+		vim.bo[state.cmdline_buf].modifiable = true
+		vim.api.nvim_buf_set_lines(state.cmdline_buf, 0, -1, false, { "" })
+		if state.cmdline_win and vim.api.nvim_win_is_valid(state.cmdline_win) then
+			vim.api.nvim_win_set_cursor(state.cmdline_win, { 1, 0 })
 		end
 		update_history_highlight()
 		return
@@ -243,26 +251,25 @@ local function navigate_history(direction)
 end
 
 local function open_history_win()
-	if history_win and vim.api.nvim_win_is_valid(history_win) then
+	if state.history_win and vim.api.nvim_win_is_valid(state.history_win) then
 		return
 	end
 
-	history_list = get_all_history()
+	state.history_list = get_all_history()
 
-	if #history_list == 0 then
+	if #state.history_list == 0 then
 		return
 	end
 
-	history_buf = create_history_buf(history_list)
-	history_win = create_history_win(history_list)
+	state.history_buf = create_history_buf(state.history_list)
+	state.history_win = create_history_win(state.history_list)
 end
 
 local function open_cmdline_win()
-	cmdline_buf = create_cmdline_buf()
-	cmdline_win = create_cmdline_win(cmdline_buf)
+	state.cmdline_buf = create_cmdline_buf()
+	state.cmdline_win = create_cmdline_win(state.cmdline_buf)
 
-	local opts = { buffer = cmdline_buf, silent = true }
-
+	local opts = { buffer = state.cmdline_buf, silent = true }
 	vim.keymap.set("i", "<CR>", function()
 		local line = vim.api.nvim_get_current_line()
 		close()
@@ -276,8 +283,9 @@ local function open_cmdline_win()
 	end, opts)
 
 	vim.keymap.set("i", "<Up>", function()
-		if not history_win or not vim.api.nvim_win_is_valid(history_win) then
+		if not state.history_win or not vim.api.nvim_win_is_valid(state.history_win) then
 			open_history_win()
+			vim.notify("Opened command history", vim.log.levels.INFO)
 		end
 		navigate_history("up")
 	end, opts)
@@ -289,9 +297,8 @@ local function open_cmdline_win()
 	vim.cmd("startinsert")
 end
 
-function M.setup()
-	vim.keymap.set({ "n", "t" }, ":", open_cmdline_win)
-	vim.keymap.set({ "n", "t" }, ";", open_cmdline_win)
+function M.setup(key)
+	vim.keymap.set({ "n", "t" }, key, open_cmdline_win)
 end
 
 return M

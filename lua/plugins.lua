@@ -1,15 +1,10 @@
 local vim = vim
 
 vim.notify = require("notify").notify
-
-local error_window = require("error_window")
-error_window.setup()
-
-local cmdline = require("cmdline")
-cmdline.setup()
-
-local search = require("search")
-search.setup()
+require("error_window").setup()
+require("cmdline").setup(";")
+require("search").setup("/")
+require("terminal").setup("<leader>t")
 
 local lazy_path = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazy_path) then
@@ -244,7 +239,7 @@ require("lazy").setup({
 						{
 							"diagnostics",
 							sources = { "nvim_diagnostic" },
-							symbols = { error = "E", warn = "W", info = "I", hint = "H" },
+							symbols = { error = " ", warn = " ", info = " ", hint = "H" },
 						},
 						{
 							function()
