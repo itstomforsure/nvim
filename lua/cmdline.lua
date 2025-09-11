@@ -131,7 +131,7 @@ local function update_history_highlight()
 
 			-- Scroll if necessary
 			if line_to_show < view.topline or line_to_show >= view.topline + win_height then
-				view.topline = math.max(0, line_to_show - math.floor(win_height / 2))
+				view.topline = math.max(0, line_to_show - math.floor(win_height) + 2)
 				vim.api.nvim_win_call(state.history_win, function()
 					vim.fn.winrestview(view)
 				end)
@@ -178,11 +178,12 @@ local function create_history_win(history)
 	if not config then
 		return
 	end
+	local height = math.min(40, #history)
 	local win = vim.api.nvim_open_win(state.history_buf, false, {
 		relative = "editor",
 		width = config.width,
-		height = #history,
-		row = config.row - #history - 1,
+		height = height,
+		row = config.row - height - 1,
 		col = config.col,
 		style = "minimal",
 		border = "rounded",
