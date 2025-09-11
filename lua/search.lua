@@ -1,4 +1,5 @@
 local vim = vim
+local symbols = require("symbols")
 local M = {}
 local search_bar = {
 	buf = nil,
@@ -46,7 +47,7 @@ local function create_search_bar_win(buf)
 	local win = vim.api.nvim_open_win(buf, true, opts)
 	vim.api.nvim_win_set_option(win, "winhl", "Normal:Normal,FloatBorder:DiagnosticInfo")
 	vim.api.nvim_win_set_option(win, "winblend", 10)
-	vim.api.nvim_win_set_option(win, "statuscolumn", " / ") -- ⌕
+	vim.api.nvim_win_set_option(win, "statuscolumn", " " .. symbols.ui.search .. " ")
 
 	return win
 end

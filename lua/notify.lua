@@ -1,4 +1,5 @@
 local vim = vim
+local symbols = require("symbols")
 local M = {}
 local state = {
 	notify_active = {},
@@ -26,9 +27,9 @@ function M.notify(msg, level)
 	local icons = {
 		[0] = "T",
 		[1] = "D",
-		[2] = " ",
-		[3] = " ",
-		[4] = " ",
+		[2] = symbols.ui.info,
+		[3] = symbols.ui.warn,
+		[4] = symbols.ui.error,
 		[5] = "P",
 		[6] = "E",
 	}

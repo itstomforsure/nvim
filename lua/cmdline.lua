@@ -286,7 +286,6 @@ local function open_cmdline_win()
 	vim.keymap.set("i", "<Up>", function()
 		if not state.history_win or not vim.api.nvim_win_is_valid(state.history_win) then
 			open_history_win()
-			vim.notify("Opened command history", vim.log.levels.INFO)
 		end
 		navigate_history("up")
 	end, opts)

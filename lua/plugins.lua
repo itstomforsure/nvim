@@ -241,7 +241,12 @@ require("lazy").setup({
 						{
 							"diagnostics",
 							sources = { "nvim_diagnostic" },
-							symbols = { error = " ", warn = " ", info = " ", hint = "H" },
+							symbols = {
+								error = symbols.ui.error,
+								warn = symbols.ui.warn,
+								info = symbols.ui.info,
+								hint = symbols.ui.hint,
+							},
 						},
 						{
 							function()
