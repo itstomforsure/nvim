@@ -6,6 +6,8 @@ require("cmdline").setup(";")
 require("search").setup("/")
 require("terminal").setup("<leader>t")
 
+local symbols = require("symbols")
+
 local lazy_path = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazy_path) then
 	vim.fn.system({
@@ -244,25 +246,35 @@ require("lazy").setup({
 						{
 							function()
 								local buf_clients = vim.lsp.get_clients({ bufnr = 0 })
-								if #buf_clients == 0 then
-									return "No LSP"
-								end
+								local parts = {}
 
-								local client_names = {}
-								for _, client in pairs(buf_clients) do
-									table.insert(client_names, client.name)
+								if #buf_clients > 0 then
+									local lsps = {}
+									for _, client in pairs(buf_clients) do
+										table.insert(lsps, client.name)
+									end
+									table.insert(parts, symbols.dev.lsp .. " " .. table.concat(lsps, ", "))
 								end
 
 								local linters = require("lint").linters_by_ft[vim.bo.filetype] or {}
-								for _, l in ipairs(linters) do
-									table.insert(client_names, l)
+								if #linters > 0 then
+									table.insert(parts, symbols.dev.linter .. " " .. table.concat(linters, ", "))
 								end
 
 								local formatters = require("conform").list_formatters(0)
-								for _, f in ipairs(formatters) do
-									table.insert(client_names, f.name)
+								if #formatters > 0 then
+									local names = {}
+									for _, f in ipairs(formatters) do
+										table.insert(names, f.name)
+									end
+									table.insert(parts, symbols.dev.formatter .. " " .. table.concat(names, ", "))
 								end
-								return table.concat(client_names, ", ")
+
+								if #parts == 0 then
+									return "No LSP"
+								end
+
+								return table.concat(parts, " | ")
 							end,
 							icon = "",
 						},
