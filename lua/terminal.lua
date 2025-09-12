@@ -41,17 +41,17 @@ local function create_terminal_win(buf)
 	return win
 end
 
--- local function close_terminal()
--- 	if terminal_win and vim.api.nvim_win_is_valid(terminal_win) then
--- 		vim.api.nvim_win_close(terminal_win, true)
--- 		terminal_win = nil
--- 	end
--- 	if terminal_buf and vim.api.nvim_buf_is_valid(terminal_buf) then
--- 		vim.api.nvim_buf_delete(terminal_buf, { force = true })
--- 		terminal_buf = nil
--- 	end
--- 	vim.api.nvim_command("stopinsert")
--- end
+local function close_terminal()
+	if terminal_win and vim.api.nvim_win_is_valid(terminal_win) then
+		vim.api.nvim_win_close(terminal_win, true)
+		terminal_win = nil
+	end
+	if terminal_buf and vim.api.nvim_buf_is_valid(terminal_buf) then
+		vim.api.nvim_buf_delete(terminal_buf, { force = true })
+		terminal_buf = nil
+	end
+	vim.cmd("stopinsert")
+end
 
 local function open_terminal_win()
 	if terminal_win and vim.api.nvim_win_is_valid(terminal_win) then
@@ -60,14 +60,13 @@ local function open_terminal_win()
 		terminal_buf = create_terminal_buf()
 		terminal_win = create_terminal_win(terminal_buf)
 
-		-- local opts = { buffer = terminal_buf, silent = true }
-		-- vim.keymap.set({ "n", "i", "v", "t" }, "<Esc>", function()
-		-- 	vim.notify("Closing terminal...", vim.log.levels.INFO)
-		-- 	close_terminal()
-		-- end, opts)
+		vim.cmd("terminal")
+		vim.cmd("startinsert")
 
-		vim.api.nvim_command("terminal")
-		vim.api.nvim_command("startinsert")
+		local opts = { buffer = terminal_buf, silent = true }
+		vim.keymap.set({ "n", "t" }, "<Esc>", function()
+			close_terminal()
+		end, opts)
 	end
 end
 
