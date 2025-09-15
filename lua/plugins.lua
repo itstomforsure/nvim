@@ -1,10 +1,11 @@
 local vim = vim
 
 vim.notify = require("notify").notify
-require("error_window").setup()
+require("error_window").setup("<leader>b")
 require("cmdline").setup(";")
 require("search").setup("/")
 require("terminal").setup("<leader>t")
+-- require("comment").setup("<leader>/")
 
 local symbols = require("symbols")
 
@@ -314,6 +315,25 @@ require("lazy").setup({
 	-- Copilot
 	{
 		"github/copilot.vim",
+		lazy = true,
+		cmd = "Copilot",
+		init = function()
+			vim.g.copilot_enabled = false
+		end,
+		keys = {
+			{
+				"<leader>c",
+				function()
+					if vim.g.copilot_enabled == true then
+						vim.g.copilot_enabled = false
+						vim.notify("Copilot Disabled")
+					else
+						vim.g.copilot_enabled = true
+						vim.notify("Copilot Enabled")
+					end
+				end,
+			},
+		},
 	},
 
 	-- Copilot Chat
@@ -321,7 +341,35 @@ require("lazy").setup({
 		"CopilotC-Nvim/CopilotChat.nvim",
 		dependencies = {
 			"nvim-lua/plenary.nvim",
+			"github/copilot.vim",
 		},
 		build = "make tiktoken",
+		lazy = true,
+		keys = {
+			{ "<leader>cp", ":CopilotChat<CR>" },
+			{ "<leader>cpe", ":CopilotChatExplain<CR>" },
+			{ "<leader>cpf", ":CopilotChatFix<CR>" },
+			{ "<leader>cpo", ":CopilotChatOptimize<CR>" },
+		},
+		config = function()
+			require("CopilotChat").setup({
+				debug = false,
+
+				window = {
+					layout = "float",
+					border = "single",
+					size = {
+						width = "80%",
+						height = "60%",
+					},
+					win_options = {
+						wrap = true,
+						linebreak = true,
+						foldcolumn = "0",
+						winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+					},
+				},
+			})
+		end,
 	},
 })
