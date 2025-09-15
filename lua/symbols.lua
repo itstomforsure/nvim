@@ -72,6 +72,7 @@ M.dev = {
 	lsp = " ", -- gear
 	formatter = " ", -- scissors
 	linter = " ", -- alert
+	command = " ", -- command line
 }
 
 return M
