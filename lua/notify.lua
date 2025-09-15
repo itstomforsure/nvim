@@ -6,8 +6,6 @@ local state = {
 	notify_heights = {},
 }
 
-vim.cmd("highlight NotifyBackground guibg=transparent guifg=#ffffff")
-
 local function wrap_text(text, max_width)
 	local lines = {}
 	for line in text:gmatch("[^\n]+") do
@@ -23,6 +21,7 @@ end
 function M.notify(msg, level)
 	level = level or 2
 	local duration = 3000
+	vim.cmd("highlight NotifyBackground guibg=transparent guifg=#ffffff")
 
 	local icons = {
 		[0] = "T",

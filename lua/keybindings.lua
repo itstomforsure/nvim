@@ -44,19 +44,27 @@ vim.keymap.set("n", "<leader>f", function()
 	vim.notify("Formatted with Conform", vim.log.levels.INFO)
 end)
 
+-- The following keybinds are set in the plugins.lua file.
+
 -- Lazygit
-vim.keymap.set("n", "<leader>gg", ":LazyGit<CR>")
+-- { "<leader>gg", ":LazyGit<CR>" }
 
 -- Copilot
-vim.keymap.set("n", "<leader>c", function()
-	if vim.g.copilot_enabled == true then
-		vim.g.copilot_enabled = false
-		vim.notify("Copilot Disabled", vim.log.levels.WARN)
-	else
-		vim.g.copilot_enabled = true
-		vim.notify("Copilot Enabled", vim.log.levels.WARN)
-	end
-end)
+-- {
+-- 	"<leader>c",
+-- 	function()
+-- 		if vim.g.copilot_enabled == true then
+-- 			vim.g.copilot_enabled = false
+-- 			vim.notify("Copilot Disabled")
+-- 		else
+-- 			vim.g.copilot_enabled = true
+-- 			vim.notify("Copilot Enabled")
+-- 		end
+-- 	end,
+-- }
 
 -- Copilot chat
-vim.keymap.set("n", "<leader>cc", ":CopilotChatToggle<CR>")
+-- { "<leader>cp", ":CopilotChat<CR>" },
+-- { "<leader>cpe", ":CopilotChatExplain<CR>" },
+-- { "<leader>cpf", ":CopilotChatFix<CR>" },
+-- { "<leader>cpo", ":CopilotChatOptimize<CR>" },
