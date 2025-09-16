@@ -1,6 +1,8 @@
 local vim = vim
+local utils = require("utils")
 local symbols = require("symbols")
 local M = {}
+local target_buf = nil
 local search_bar = {
 	buf = nil,
 	win = nil,
@@ -10,124 +12,37 @@ local search_list = {
 	buf = nil,
 	win = nil,
 	matches = {},
+	selected_id = 0,
 }
 
-local function create_search_bar_buf()
-	if search_bar.buf and vim.api.nvim_buf_is_valid(search_bar.buf) then
-		return search_bar.buf
-	end
-
-	local buf = vim.api.nvim_create_buf(false, true)
-	vim.bo[buf].buftype = "nofile" -- nofile, prompt
-	vim.bo[buf].bufhidden = "wipe"
-
-	return buf
-end
-
-local function create_search_bar_win(buf)
-	if search_bar.win and vim.api.nvim_win_is_valid(search_bar.win) then
-		return
-	end
-
-	local width = math.min(80, vim.o.columns - 10)
-	local height = 1
-	local row = math.floor((vim.o.lines - height) * 0.8)
-	local col = math.floor((vim.o.columns - width) / 2)
-
-	local opts = {
-		relative = "editor",
-		width = width,
-		height = height,
-		row = row,
-		col = col,
-		style = "minimal",
-		border = "rounded",
-	}
-
-	local win = vim.api.nvim_open_win(buf, true, opts)
-	vim.api.nvim_win_set_option(win, "winhl", "Normal:Normal,FloatBorder:DiagnosticInfo")
-	vim.api.nvim_win_set_option(win, "winblend", 10)
-	vim.api.nvim_win_set_option(win, "statuscolumn", " " .. symbols.ui.search .. " ")
-
-	return win
-end
-
-local function create_search_list_buf()
-	local display_lines = {}
-	for i = #search_list.matches, 1, -1 do
-		table.insert(display_lines, search_list.matches[i].text)
-	end
-
-	if search_list.buf and vim.api.nvim_buf_is_valid(search_list.buf) then
-		vim.bo[search_list.buf].modifiable = true
-		vim.api.nvim_buf_set_lines(search_list.buf, 0, -1, false, display_lines)
-		vim.bo[search_list.buf].modifiable = false
-
-		return search_list.buf
-	end
-
-	local buf = vim.api.nvim_create_buf(false, true)
-	vim.bo[buf].buftype = "nofile"
-	vim.bo[buf].bufhidden = "wipe"
-	vim.bo[buf].modifiable = true
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, display_lines)
-	vim.bo[buf].modifiable = false
-
-	return buf
-end
-
-local function create_search_list_win(buf)
-	if search_list.win and vim.api.nvim_win_is_valid(search_list.win) then
-		return
-	end
-
-	local config = vim.api.nvim_win_get_config(search_bar.win)
-	if not config then
-		return
-	end
-
-	local width = math.min(80, vim.o.columns - 10)
-	-- local height = math.min(20, math.floor(vim.o.lines * 0.5))
-	local row = config.row - #search_list.matches - 1
-	local col = math.floor((vim.o.columns - width) / 2)
-
-	local opts = {
-		relative = "editor",
-		width = width,
-		height = #search_list.matches,
-		row = row,
-		col = col,
-		style = "minimal",
-		border = "rounded",
-	}
-
-	local win = vim.api.nvim_open_win(buf, false, opts)
-	vim.api.nvim_win_set_option(win, "winhl", "Normal:Normal,FloatBorder:DiagnosticInfo")
-	vim.api.nvim_win_set_option(win, "winblend", 10)
-	-- vim.api.nvim_win_set_option(win, "statuscolumn", " / ") -- ⌕
-
-	return win
-end
-
 local function close()
-	if search_bar.buf and vim.api.nvim_buf_is_valid(search_bar.buf) then
-		vim.api.nvim_buf_delete(search_bar.buf, { force = true })
-		search_bar.buf = nil
-		search_bar.last_query = ""
-	end
-	if search_bar.win and vim.api.nvim_win_is_valid(search_bar.win) then
+	if utils.is_win_valid(search_bar.win) then
 		vim.api.nvim_win_close(search_bar.win, true)
 		search_bar.win = nil
 	end
 
-	if search_list.buf and vim.api.nvim_buf_is_valid(search_list.buf) then
+	if utils.is_buf_valid(search_bar.buf) then
+		vim.api.nvim_buf_delete(search_bar.buf, { force = true })
+		search_bar.buf = nil
+		search_bar.last_query = ""
+	end
+
+	if utils.is_win_valid(search_list.win) then
+		vim.api.nvim_win_close(search_list.win, true)
+		search_list.win = nil
+	end
+
+	if utils.is_buf_valid(search_list.buf) then
+		vim.api.nvim_buf_clear_namespace(search_list.buf, -1, 0, -1)
 		vim.api.nvim_buf_delete(search_list.buf, { force = true })
 		search_list.buf = nil
 		search_list.matches = {}
+		search_list.selected_id = 0
 	end
-	if search_list.win and vim.api.nvim_win_is_valid(search_list.win) then
-		vim.api.nvim_win_close(search_list.win, true)
-		search_list.win = nil
+
+	if utils.is_buf_valid(target_buf) then
+		vim.api.nvim_set_current_buf(target_buf)
+		target_buf = nil
 	end
 
 	vim.cmd("nohlsearch")
@@ -140,24 +55,138 @@ local function get_matches(query)
 		return matches
 	end
 
-	local lines = vim.api.nvim_buf_get_lines(search_bar.buf, 0, -1, false)
+	local buf = target_buf or vim.api.nvim_get_current_buf()
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local line_id = 1
 	for lnum, line in ipairs(lines) do
 		local col = 1
 		while true do
-			local s, e = string.find(line, query, col)
+			local s, e = string.find(line, query, col, true)
 			if not s then
 				break
 			end
 			table.insert(matches, {
+				id = line_id,
 				lnum = lnum,
 				col = s,
 				text = line,
 			})
+			line_id = line_id + 1
 			col = e + 1
 		end
 	end
 
 	return matches
+end
+
+local function update_search_list_highlight()
+	local line_id = search_list.selected_id - 1
+	vim.api.nvim_buf_add_highlight(search_list.buf, -1, "Search", line_id, 0, -1)
+end
+
+local function update_target_buf_highlight()
+	local match = search_list.matches[search_list.selected_id]
+	vim.api.nvim_win_set_cursor(vim.fn.win_getid(vim.fn.bufwinnr(target_buf)), { match.lnum, match.col - 1 })
+end
+
+local function update_search_info_on_search_bar()
+	vim.api.nvim_buf_clear_namespace(search_bar.buf, -1, 0, -1)
+	vim.api.nvim_buf_set_extmark(search_bar.buf, vim.api.nvim_create_namespace("searchinfo"), 0, 0, {
+		virt_text = { { search_list.selected_id .. "/" .. #search_list.matches .. " " } },
+		virt_text_pos = "right_align",
+	})
+end
+
+local function scroll_to_view()
+	-- TODO: this currently doesn't work as it supposed to, can't figure out why yet
+	local line_id = search_list.selected_id - 1
+	local win_height = vim.api.nvim_win_get_height(search_list.win)
+	local line_to_show = line_id
+	local view = vim.api.nvim_win_call(search_list.win, function()
+		return vim.fn.winsaveview()
+	end)
+
+	if line_to_show < view.topline or line_to_show >= view.topline + win_height then
+		view.topline = math.max(0, line_to_show - math.floor(win_height))
+		vim.api.nvim_win_call(search_list.win, function()
+			vim.fn.winrestview(view)
+		end)
+	end
+end
+
+local function update_highlights()
+	if
+		not utils.is_buf_valid(search_list.buf)
+		or not utils.is_win_valid(search_list.win)
+		or not utils.is_buf_valid(target_buf)
+	then
+		return
+	end
+
+	vim.api.nvim_buf_clear_namespace(search_list.buf, -1, 0, -1)
+
+	if search_list.selected_id > 0 and search_list.selected_id <= #search_list.matches then
+		update_search_list_highlight()
+		update_target_buf_highlight()
+		update_search_info_on_search_bar()
+		scroll_to_view()
+	end
+end
+
+local function update_search_list_content()
+	if not utils.is_win_valid(search_bar.win) or not utils.is_buf_valid(search_list.buf) then
+		return
+	end
+
+	local display_lines = {}
+	for _, m in ipairs(search_list.matches) do
+		table.insert(display_lines, string.format("%4d | %4d: %s", m.id, m.lnum, m.text))
+	end
+
+	vim.bo[search_list.buf].modifiable = true
+	vim.api.nvim_buf_set_lines(search_list.buf, 0, -1, false, display_lines)
+	vim.bo[search_list.buf].modifiable = false
+
+	if utils.is_win_valid(search_bar.win) then
+		vim.api.nvim_set_current_win(search_bar.win)
+	end
+
+	update_highlights()
+end
+
+local function navigate_list(direction)
+	if not utils.is_win_valid(search_list.win) or not utils.is_buf_valid(search_bar.buf) then
+		return
+	end
+
+	if #search_list.matches == 0 then
+		return
+	end
+
+	search_list.selected_id = search_list.selected_id + direction
+	update_highlights()
+end
+
+local function open_search_list_win()
+	if not utils.is_buf_valid(search_bar.buf) or not utils.is_win_valid(search_bar.win) then
+		return
+	end
+
+	local search_bar_win_config = vim.api.nvim_win_get_config(search_bar.win)
+	if not search_bar_win_config then
+		return
+	end
+
+	local height = math.min(40, #search_list.matches)
+	local search_list_win_opts = {
+		width = search_bar_win_config.width,
+		height = height,
+		row = search_bar_win_config.row - height - 1,
+		col = search_bar_win_config.col,
+	}
+
+	search_list.buf = utils.create_scratch_buf(search_list.buf)
+	search_list.win = utils.create_floating_win(search_list.buf, search_list.win, search_list_win_opts)
 end
 
 local function do_search(query)
@@ -168,46 +197,25 @@ local function do_search(query)
 
 	search_bar.last_query = query
 	search_list.matches = get_matches(query)
+
 	vim.fn.setreg("/", query)
 	vim.opt.hlsearch = true
-
-	-- local display_lines = {}
-	-- for i = #search_list.matches, 1, -1 do
-	-- 	table.insert(display_lines, search_list.matches[i].text)
-	-- end
-	-- vim.bo[search_list.buf].modifiable = true
-	-- vim.api.nvim_buf_set_lines(search_list.buf, 0, -1, false, { display_lines })
-	-- vim.bo[search_list.buf].modifiable = false
-
 	vim.cmd("silent! normal! n")
+
+	vim.schedule(function()
+		if #search_list.matches > 0 and not utils.is_win_valid(search_list.win) then
+			if search_list.selected_id == 0 then
+				search_list.selected_id = 1
+			end
+			open_search_list_win()
+		end
+
+		update_search_list_content()
+	end)
 end
 
-local function open_search_bar_win()
-	search_bar.buf = create_search_bar_buf()
-	search_bar.win = create_search_bar_win(search_bar.buf)
-
-	-- if search_bar.last_query ~= "" then
-	-- 	vim.notify("Last query: " .. search_bar.last_query, vim.log.levels.INFO)
-	-- 	-- vim.api.nvim_buf_set_lines(search_bar.buf, 0, -1, false, { "Search: " .. search_bar.last_query })
-	-- 	-- vim.api.nvim_win_set_cursor(search_bar.win, { 1, #("Search: " .. search_bar.last_query) })
-	-- else
-	-- 	vim.notify("No previous query.", vim.log.levels.INFO)
-	-- 	-- vim.api.nvim_buf_set_lines(search_bar.buf, 0, -1, false, { "Search: " })
-	-- 	-- vim.api.nvim_win_set_cursor(search_bar.win, { 1, #("Search: ") })
-	-- end
-	-- vim.notify("Type to search. Press <Esc> or <CR> to close.", vim.log.levels.INFO)
-
-	-- search_list.buf = create_search_list_buf()
-	-- search_list.win = create_search_list_win(search_list.buf)
-
-	vim.api.nvim_buf_attach(search_bar.buf, false, {
-		on_lines = function(_, _, _, _, _, _)
-			local input = vim.trim(vim.fn.getline(1):gsub("^Search:%s*", ""))
-			do_search(vim.fn.escape(input, "/\\"))
-		end,
-	})
-
-	local opts = { silent = true, buffer = search_bar.buf }
+local function buf_keybinds(buf)
+	local opts = { silent = true, buffer = buf }
 	vim.keymap.set("i", "<Esc>", function()
 		close()
 	end, opts)
@@ -216,11 +224,44 @@ local function open_search_bar_win()
 		close()
 	end, opts)
 
+	vim.keymap.set("i", "<Down>", function()
+		navigate_list(1)
+	end, opts)
+
+	vim.keymap.set("i", "<Up>", function()
+		navigate_list(-1)
+	end, opts)
+end
+
+local function open_search_bar_win()
+	target_buf = vim.api.nvim_get_current_buf()
+	search_bar.buf = utils.create_scratch_buf(search_bar.buf)
+	search_bar.win = utils.create_floating_win(search_bar.buf, search_bar.win, {
+		width = math.min(80, vim.o.columns - 10),
+		height = 1,
+		row = math.floor((vim.o.lines - 1) * 0.8),
+		col = math.floor((vim.o.columns - math.min(80, vim.o.columns - 10)) / 2),
+		statuscolumn = " " .. symbols.ui.search .. " ",
+	})
+
 	vim.cmd("startinsert")
+
+	buf_keybinds(search_bar.buf)
+
+	vim.api.nvim_buf_attach(search_bar.buf, false, {
+		on_lines = function(_, _, _, _, _, _)
+			local line = vim.fn.getline(1)
+			local input = vim.trim(line:gsub("^Search:%s*", ""))
+			local escaped_input = vim.fn.escape(input, "/\\")
+
+			do_search(escaped_input)
+		end,
+	})
 end
 
 function M.setup(key)
-	vim.keymap.set({ "n", "v" }, key, open_search_bar_win, { noremap = true, silent = true })
+	local opts = { noremap = true, silent = true, desc = "Open search bar" }
+	vim.keymap.set({ "n", "v" }, key, open_search_bar_win, opts)
 end
 
 return M
