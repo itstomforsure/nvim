@@ -3,6 +3,7 @@ local utils = require("utils")
 local symbols = require("symbols")
 local M = {}
 local target_buf = nil
+local target_win = nil
 local search_bar = {
 	buf = nil,
 	win = nil,
@@ -16,6 +17,14 @@ local search_list = {
 }
 
 local function close()
+	vim.schedule(function()
+		if utils.is_win_valid(target_win) then
+			vim.api.nvim_set_current_win(target_win)
+		end
+
+		target_win = nil
+	end)
+
 	if utils.is_win_valid(search_bar.win) then
 		vim.api.nvim_win_close(search_bar.win, true)
 		search_bar.win = nil
@@ -38,11 +47,6 @@ local function close()
 		search_list.buf = nil
 		search_list.matches = {}
 		search_list.selected_id = 0
-	end
-
-	if utils.is_buf_valid(target_buf) then
-		vim.api.nvim_set_current_buf(target_buf)
-		target_buf = nil
 	end
 
 	vim.cmd("nohlsearch")
@@ -235,6 +239,7 @@ end
 
 local function open_search_bar_win()
 	target_buf = vim.api.nvim_get_current_buf()
+	target_win = vim.api.nvim_get_current_win()
 	search_bar.buf = utils.create_scratch_buf(search_bar.buf)
 	search_bar.win = utils.create_floating_win(search_bar.buf, search_bar.win, {
 		width = math.min(80, vim.o.columns - 10),

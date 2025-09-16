@@ -2,7 +2,7 @@ local vim = vim
 local symbols = require("symbols")
 local utils = require("utils")
 local M = {}
-local current_buf = nil
+local current_win = nil
 local command_line = {
 	buf = nil,
 	win = nil,
@@ -15,6 +15,14 @@ local command_history = {
 }
 
 local function close()
+	vim.schedule(function()
+		if utils.is_win_valid(current_win) then
+			vim.api.nvim_set_current_win(current_win)
+		end
+
+		current_win = nil
+	end)
+
 	if utils.is_win_valid(command_line.win) then
 		vim.api.nvim_win_close(command_line.win, true)
 		command_line.win = nil
@@ -37,12 +45,6 @@ local function close()
 		command_history.list = {}
 	end
 
-	if utils.is_buf_valid(current_buf) then
-		vim.api.nvim_set_current_buf(current_buf)
-		current_buf = nil
-	end
-
-	-- vim.cmd("bprev")
 	vim.cmd("stopinsert")
 end
 
@@ -175,7 +177,7 @@ local function open_command_history_win()
 	vim.api.nvim_buf_set_lines(command_history.buf, 0, -1, false, display_lines)
 	vim.bo[command_history.buf].modifiable = false
 
-	local current_win = vim.api.nvim_get_current_win()
+	local current_win_l = vim.api.nvim_get_current_win()
 	command_history.win = utils.create_floating_win(command_history.buf, command_history.win, {
 		height = math.min(40, #command_history.list),
 		width = command_line_win_config.width,
@@ -183,8 +185,8 @@ local function open_command_history_win()
 		col = command_line_win_config.col,
 	})
 
-	if utils.is_win_valid(current_win) then
-		vim.api.nvim_set_current_win(current_win)
+	if utils.is_win_valid(current_win_l) then
+		vim.api.nvim_set_current_win(current_win_l)
 	end
 
 	if #command_history.list > 0 and command_history.selected_id == 0 then
@@ -222,7 +224,7 @@ local function buf_keybinds(buf, win)
 end
 
 local function open_command_line_win()
-	current_buf = vim.api.nvim_get_current_buf()
+	current_win = vim.api.nvim_get_current_win()
 	command_line.buf = utils.create_scratch_buf(command_line.buf)
 	command_line.win = utils.create_floating_win(command_line.buf, command_line.win, {
 		width = math.min(80, vim.o.columns - 10),
