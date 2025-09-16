@@ -2,6 +2,7 @@ local vim = vim
 local symbols = require("symbols")
 local utils = require("utils")
 local M = {}
+local current_buf = nil
 local command_line = {
 	buf = nil,
 	win = nil,
@@ -36,6 +37,12 @@ local function close()
 		command_history.list = {}
 	end
 
+	if utils.is_buf_valid(current_buf) then
+		vim.api.nvim_set_current_buf(current_buf)
+		current_buf = nil
+	end
+
+	-- vim.cmd("bprev")
 	vim.cmd("stopinsert")
 end
 
@@ -215,6 +222,7 @@ local function buf_keybinds(buf, win)
 end
 
 local function open_command_line_win()
+	current_buf = vim.api.nvim_get_current_buf()
 	command_line.buf = utils.create_scratch_buf(command_line.buf)
 	command_line.win = utils.create_floating_win(command_line.buf, command_line.win, {
 		width = math.min(80, vim.o.columns - 10),
