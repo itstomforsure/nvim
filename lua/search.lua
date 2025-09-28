@@ -73,7 +73,7 @@ local function get_matches(query)
 				id = line_id,
 				lnum = lnum,
 				col = s,
-				text = line,
+				text = line:gsub("^%s*(.-)%s*$", "%1"),
 			})
 			line_id = line_id + 1
 			col = e + 1
@@ -102,20 +102,15 @@ local function update_search_info_on_search_bar()
 end
 
 local function scroll_to_view()
-	-- TODO: this currently doesn't work as it supposed to, can't figure out why yet
-	local line_id = search_list.selected_id - 1
-	local win_height = vim.api.nvim_win_get_height(search_list.win)
-	local line_to_show = line_id
 	local view = vim.api.nvim_win_call(search_list.win, function()
 		return vim.fn.winsaveview()
 	end)
 
-	if line_to_show < view.topline or line_to_show >= view.topline + win_height then
-		view.topline = math.max(0, line_to_show - math.floor(win_height))
-		vim.api.nvim_win_call(search_list.win, function()
-			vim.fn.winrestview(view)
-		end)
-	end
+	local line_id = search_list.selected_id - 4
+	view.topline = line_id
+	vim.api.nvim_win_call(search_list.win, function()
+		vim.fn.winrestview(view)
+	end)
 end
 
 local function update_highlights()
@@ -144,7 +139,7 @@ local function update_search_list_content()
 
 	local display_lines = {}
 	for _, m in ipairs(search_list.matches) do
-		table.insert(display_lines, string.format("%4d | %4d: %s", m.id, m.lnum, m.text))
+		table.insert(display_lines, string.format("%4d: %s", m.lnum, m.text))
 	end
 
 	vim.bo[search_list.buf].modifiable = true
@@ -167,7 +162,14 @@ local function navigate_list(direction)
 		return
 	end
 
-	search_list.selected_id = search_list.selected_id + direction
+	if direction == -1 and search_list.selected_id > 1 then
+		search_list.selected_id = search_list.selected_id + direction
+	else
+		if direction == 1 and search_list.selected_id <= #search_list.matches - 1 then
+			search_list.selected_id = search_list.selected_id + direction
+		end
+	end
+
 	update_highlights()
 end
 
@@ -181,11 +183,11 @@ local function open_search_list_win()
 		return
 	end
 
-	local height = math.min(40, #search_list.matches)
+	local height = math.min(10, #search_list.matches)
 	local search_list_win_opts = {
 		width = search_bar_win_config.width,
 		height = height,
-		row = search_bar_win_config.row - height - 1,
+		row = search_bar_win_config.row + 2,
 		col = search_bar_win_config.col,
 	}
 
@@ -241,11 +243,13 @@ local function open_search_bar_win()
 	target_buf = vim.api.nvim_get_current_buf()
 	target_win = vim.api.nvim_get_current_win()
 	search_bar.buf = utils.create_scratch_buf(search_bar.buf)
+
+	local width = math.min(50, vim.o.columns - 10)
 	search_bar.win = utils.create_floating_win(search_bar.buf, search_bar.win, {
-		width = math.min(80, vim.o.columns - 10),
+		width = width,
 		height = 1,
-		row = math.floor((vim.o.lines - 1) * 0.8),
-		col = math.floor((vim.o.columns - math.min(80, vim.o.columns - 10)) / 2),
+		row = 0,
+		col = vim.o.columns - width,
 		statuscolumn = " " .. symbols.ui.search .. " ",
 	})
 
