@@ -353,21 +353,14 @@ require("lazy").setup({
 		},
 		config = function()
 			require("CopilotChat").setup({
-				debug = false,
-
+				auto_insert_mode = true,
 				window = {
-					layout = "float",
-					border = "single",
-					size = {
-						width = "80%",
-						height = "60%",
-					},
-					win_options = {
-						wrap = true,
-						linebreak = true,
-						foldcolumn = "0",
-						winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
-					},
+					layout = "vertical",
+					border = "simple",
+					width = 0.25,
+				},
+				headers = {
+					user = "👤 Copilot Chat ",
 				},
 			})
 		end,

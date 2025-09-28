@@ -21,6 +21,7 @@ local settings = {
 	ignorecase = true,
 	smartcase = true,
 	hlsearch = true,
+	splitright = true,
 }
 
 for key, value in pairs(settings) do
