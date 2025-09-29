@@ -193,6 +193,7 @@ local function open_search_list_win()
 
 	search_list.buf = utils.create_scratch_buf(search_list.buf)
 	search_list.win = utils.create_floating_win(search_list.buf, search_list.win, search_list_win_opts)
+	vim.api.nvim_set_option_value("wrap", false, { win = search_list.win })
 end
 
 local function do_search(query)
