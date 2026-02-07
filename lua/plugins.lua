@@ -4,7 +4,9 @@ vim.notify = require("notify").notify
 require("error_window").setup("<leader>b")
 require("cmdline").setup(";")
 require("search").setup("/")
-require("terminal").setup("<leader>t")
+require("terminal").setup({ keybind = "<leader>t", new_keybind = "<leader>T", prev_keybind = "[t", next_keybind = "]t" })
+-- require("llm").setup({ debounce_ms = 250, debug = true })
+require("llm_chat").setup({ keybind = "<leader>g", position = "rightbelow" })
 -- require("comment").setup("<leader>/")
 
 local symbols = require("symbols")
@@ -149,11 +151,13 @@ require("lazy").setup({
 				typescriptreact = { "eslint_d" },
 			}
 
-			vim.api.nvim_create_autocmd({ "BufWritePost", "InsertLeave", "TextChanged", "TextChangedI" }, {
-				callback = function()
-					require("lint").try_lint()
-				end,
-			})
+			vim.api.nvim_create_autocmd(
+				{ "BufWritePost", "InsertLeave", "TextChanged", "TextChangedI" },
+				{
+					callback = function()
+						require("lint").try_lint()
+					end,
+				})
 		end,
 	},
 
@@ -259,21 +263,29 @@ require("lazy").setup({
 									for _, client in pairs(buf_clients) do
 										table.insert(lsps, client.name)
 									end
-									table.insert(parts, symbols.dev.lsp .. " " .. table.concat(lsps, ", "))
+									table.insert(parts,
+										symbols.dev.lsp ..
+										" " .. table.concat(lsps, ", "))
 								end
 
-								local linters = require("lint").linters_by_ft[vim.bo.filetype] or {}
+								local linters = require("lint").linters_by_ft
+									[vim.bo.filetype] or {}
 								if #linters > 0 then
-									table.insert(parts, symbols.dev.linter .. " " .. table.concat(linters, ", "))
+									table.insert(parts,
+										symbols.dev.linter ..
+										" " .. table.concat(linters, ", "))
 								end
 
-								local formatters = require("conform").list_formatters(0)
+								local formatters = require("conform")
+									.list_formatters(0)
 								if #formatters > 0 then
 									local names = {}
 									for _, f in ipairs(formatters) do
 										table.insert(names, f.name)
 									end
-									table.insert(parts, symbols.dev.formatter .. " " .. table.concat(names, ", "))
+									table.insert(parts,
+										symbols.dev.formatter ..
+										" " .. table.concat(names, ", "))
 								end
 
 								if #parts == 0 then
@@ -318,7 +330,8 @@ require("lazy").setup({
 		lazy = true,
 		cmd = "Copilot",
 		init = function()
-			vim.g.copilot_enabled = false
+			vim.g.copilot_enabled = true
+			vim.notify("Copilot enabled: " .. vim.g.copilot_enabled)
 		end,
 		keys = {
 			{
@@ -346,7 +359,7 @@ require("lazy").setup({
 		build = "make tiktoken",
 		lazy = true,
 		keys = {
-			{ "<leader>cp", ":CopilotChat<CR>" },
+			{ "<leader>cp",  ":CopilotChat<CR>" },
 			{ "<leader>cpe", ":CopilotChatExplain<CR>" },
 			{ "<leader>cpf", ":CopilotChatFix<CR>" },
 			{ "<leader>cpo", ":CopilotChatOptimize<CR>" },
