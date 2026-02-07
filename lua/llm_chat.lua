@@ -1,0 +1,1297 @@
+local vim = vim
+local utils = require("utils")
+local M = {}
+local buf = nil
+local win = nil
+local input_buf = nil
+local input_win = nil
+local chats = {}
+local current_index = nil
+local last_win = nil
+local last_buf = nil
+local models = {}
+local models_loaded = false
+local chat_state = {}
+local keybinds = {
+	open = "<leader>g",
+	new = nil,
+	prev = nil,
+	next = nil,
+	add_buffer = nil,
+	add_buffers = nil,
+	add_nvim_tree = nil,
+	add_telescope = nil,
+}
+local panel_opts = {
+	width = nil,
+	width_ratio = 0.3,
+	max_width = 80,
+	input_height = 3,
+}
+local context_opts = {
+	max_files = 12,
+	max_lines_per_file = 400,
+	max_total_lines = 2000,
+	max_label_len = 28,
+}
+local ollama_opts = {
+	host = "http://127.0.0.1:11434",
+	container = nil,
+	default_model = nil,
+	system_prompt = nil,
+}
+
+local close
+local show_current
+local chat_tab_click
+local chat_tab_close
+local chat_model_select
+local chat_context_remove
+local prune_chats
+local set_input_winbar
+
+local function resolve_width()
+	if panel_opts.width then
+		return panel_opts.width
+	end
+
+	return math.min(panel_opts.max_width, math.floor(vim.o.columns * panel_opts.width_ratio))
+end
+
+local function normalize_host()
+	if not ollama_opts.host then
+		return "http://127.0.0.1:11434"
+	end
+
+	local host = ollama_opts.host
+	if host:sub(-1) == "/" then
+		host = host:sub(1, -2)
+	end
+	return host
+end
+
+local function run_command(cmd, input)
+	local output = vim.fn.system(cmd, input)
+	if vim.v.shell_error ~= 0 then
+		return nil, output
+	end
+	return output, nil
+end
+
+local function build_curl_cmd(path, use_stdin)
+	local host = normalize_host()
+	local url = host .. path
+
+	if ollama_opts.container then
+		if use_stdin then
+			return {
+				"docker",
+				"exec",
+				"-i",
+				ollama_opts.container,
+				"curl",
+				"-s",
+				"-X",
+				"POST",
+				"-H",
+				"Content-Type: application/json",
+				"--data-binary",
+				"@-",
+				url,
+			}
+		end
+		return {
+			"docker",
+			"exec",
+			ollama_opts.container,
+			"curl",
+			"-s",
+			url,
+		}
+	end
+
+	if use_stdin then
+		return {
+			"curl",
+			"-s",
+			"-X",
+			"POST",
+			"-H",
+			"Content-Type: application/json",
+			"--data-binary",
+			"@-",
+			url,
+		}
+	end
+	return { "curl", "-s", url }
+end
+
+local function parse_models_from_tags(raw)
+	local ok, data = pcall(vim.fn.json_decode, raw)
+	if not ok or type(data) ~= "table" then
+		return nil
+	end
+
+	local list = {}
+	for _, entry in ipairs(data.models or {}) do
+		if entry.name then
+			table.insert(list, entry.name)
+		end
+	end
+	return list
+end
+
+local function parse_models_from_ollama_list(raw)
+	local list = {}
+	local lines = vim.split(raw or "", "\n", { trimempty = true })
+	for i = 2, #lines do
+		local name = vim.split(lines[i], "%s+")[1]
+		if name and name ~= "" then
+			table.insert(list, name)
+		end
+	end
+	return list
+end
+
+local function fetch_models()
+	local cmd = build_curl_cmd("/api/tags", false)
+	local output, err = run_command(cmd)
+	if output then
+		local list = parse_models_from_tags(output)
+		if list and #list > 0 then
+			return list
+		end
+	end
+
+	if ollama_opts.container then
+		local list_output = run_command({ "docker", "exec", ollama_opts.container, "ollama", "list" })
+		local list = parse_models_from_ollama_list(list_output)
+		if #list > 0 then
+			return list
+		end
+	end
+
+	if err and err ~= "" then
+		vim.notify(err, vim.log.levels.WARN)
+	end
+	return {}
+end
+
+local function ensure_models(force)
+	if models_loaded and not force then
+		return
+	end
+
+	models = fetch_models()
+	models_loaded = true
+end
+
+local function is_chat_buf(target_buf)
+	return utils.is_buf_valid(target_buf) and vim.b[target_buf].llm_chat == true
+end
+
+local function escape_statusline(text)
+	return (text or ""):gsub("%%", "%%%%")
+end
+
+local function truncate_label(text)
+	if not text then
+		return ""
+	end
+
+	local max_len = context_opts.max_label_len
+	if not max_len or max_len <= 0 then
+		return text
+	end
+
+	if #text <= max_len then
+		return text
+	end
+
+	if max_len <= 3 then
+		return text:sub(1, max_len)
+	end
+
+	return text:sub(1, max_len - 3) .. "..."
+end
+
+local function remember_focus()
+	local current_win = vim.api.nvim_get_current_win()
+	if utils.is_win_valid(win) and current_win == win then
+		return
+	end
+
+	if utils.is_win_valid(current_win) then
+		last_win = current_win
+		last_buf = vim.api.nvim_win_get_buf(current_win)
+	end
+end
+
+local function focus_last_target()
+	if utils.is_win_valid(last_win) then
+		vim.api.nvim_set_current_win(last_win)
+		return
+	end
+
+	if utils.is_buf_valid(last_buf) then
+		local wins = vim.fn.win_findbuf(last_buf)
+		if #wins > 0 and utils.is_win_valid(wins[1]) then
+			vim.api.nvim_set_current_win(wins[1])
+		end
+	end
+end
+
+local function get_chat_state(chat_buf)
+	if not chat_state[chat_buf] then
+		chat_state[chat_buf] = {
+			messages = {},
+			model = ollama_opts.default_model,
+			context = {},
+		}
+		if ollama_opts.system_prompt then
+			table.insert(chat_state[chat_buf].messages, {
+				role = "system",
+				content = ollama_opts.system_prompt,
+			})
+		end
+	end
+	return chat_state[chat_buf]
+end
+
+local function ensure_model_for_chat(chat_buf)
+	ensure_models(false)
+	local state = get_chat_state(chat_buf)
+
+	if state.model then
+		return state.model
+	end
+
+	if #models > 0 then
+		state.model = models[1]
+	elseif ollama_opts.default_model then
+		state.model = ollama_opts.default_model
+	end
+
+	return state.model
+end
+
+local function ensure_active_chat()
+	prune_chats()
+	if is_chat_buf(buf) then
+		return buf
+	end
+
+	if #chats > 0 then
+		current_index = #chats
+		buf = chats[current_index]
+		return buf
+	end
+
+	vim.notify("Open the chat panel before adding context", vim.log.levels.WARN)
+	return nil
+end
+
+local function add_context_entry(path, bufnr)
+	local chat_buf = ensure_active_chat()
+	if not chat_buf then
+		return false
+	end
+
+	if not path or path == "" then
+		return false
+	end
+
+	local abs_path = vim.fn.fnamemodify(path, ":p")
+	local state = get_chat_state(chat_buf)
+	state.context = state.context or {}
+
+	for _, entry in ipairs(state.context) do
+		if entry.path == abs_path then
+			return false
+		end
+	end
+
+	if context_opts.max_files and #state.context >= context_opts.max_files then
+		vim.notify("Context limit reached", vim.log.levels.WARN)
+		return false
+	end
+
+	local label = vim.fn.fnamemodify(abs_path, ":t")
+	table.insert(state.context, {
+		path = abs_path,
+		label = label,
+		bufnr = bufnr,
+	})
+
+	set_input_winbar()
+	return true
+end
+
+local function add_buffer_context(target_buf)
+	if not utils.is_buf_valid(target_buf) then
+		return false
+	end
+
+	if vim.bo[target_buf].buftype ~= "" then
+		return false
+	end
+
+	if vim.b[target_buf].llm_chat then
+		return false
+	end
+
+	local name = vim.api.nvim_buf_get_name(target_buf)
+	if name == "" then
+		return false
+	end
+
+	return add_context_entry(name, target_buf)
+end
+
+local function add_current_buffer_context()
+	local chat_buf = ensure_active_chat()
+	if not chat_buf then
+		return
+	end
+
+	local target_buf = vim.api.nvim_get_current_buf()
+	if target_buf == input_buf or is_chat_buf(target_buf) then
+		target_buf = last_buf
+	end
+
+	if not add_buffer_context(target_buf) then
+		vim.notify("No file buffer to add", vim.log.levels.WARN)
+	end
+end
+
+local function add_open_buffers_context()
+	local chat_buf = ensure_active_chat()
+	if not chat_buf then
+		return
+	end
+
+	local added = 0
+	for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.bo[bufnr].buflisted and vim.api.nvim_buf_is_loaded(bufnr) then
+			if add_buffer_context(bufnr) then
+				added = added + 1
+			end
+		end
+	end
+
+	if added == 0 then
+		vim.notify("No open file buffers to add", vim.log.levels.WARN)
+	end
+end
+
+local function add_nvim_tree_context()
+	local chat_buf = ensure_active_chat()
+	if not chat_buf then
+		return
+	end
+
+	local ok, api = pcall(require, "nvim-tree.api")
+	if not ok then
+		vim.notify("nvim-tree not available", vim.log.levels.WARN)
+		return
+	end
+
+	local nodes = {}
+	if api.marks and api.marks.list then
+		nodes = api.marks.list()
+	end
+
+	if #nodes == 0 and api.tree and api.tree.get_node_under_cursor then
+		local node = api.tree.get_node_under_cursor()
+		if node then
+			nodes = { node }
+		end
+	end
+
+	local added = 0
+	for _, node in ipairs(nodes) do
+		local path = node.absolute_path or node.link_to or node.path or node.name
+		if path and node.type ~= "directory" then
+			if add_context_entry(path, nil) then
+				added = added + 1
+			end
+		end
+	end
+
+	if added == 0 then
+		vim.notify("No files selected in nvim-tree", vim.log.levels.WARN)
+	end
+end
+
+local function add_telescope_context(prompt_bufnr)
+	local chat_buf = ensure_active_chat()
+	if not chat_buf then
+		return
+	end
+
+	local ok, action_state = pcall(require, "telescope.actions.state")
+	if not ok then
+		vim.notify("Telescope not available", vim.log.levels.WARN)
+		return
+	end
+
+	local entry = action_state.get_selected_entry()
+	if not entry then
+		vim.notify("No telescope entry selected", vim.log.levels.WARN)
+		return
+	end
+
+	local path = entry.path or entry.filename or entry.value
+	if type(path) == "table" then
+		path = path.path or path.filename or path[1]
+	end
+
+	if type(path) ~= "string" or path == "" then
+		vim.notify("Selected entry has no file path", vim.log.levels.WARN)
+		return
+	end
+
+	add_context_entry(path, nil)
+	if prompt_bufnr then
+		local ok_actions, actions = pcall(require, "telescope.actions")
+		if ok_actions then
+			actions.close(prompt_bufnr)
+		end
+	end
+end
+
+local function append_lines(target_buf, lines)
+	if not utils.is_buf_valid(target_buf) then
+		return
+	end
+
+	local line_count = vim.api.nvim_buf_line_count(target_buf)
+	vim.api.nvim_buf_set_lines(target_buf, line_count, line_count, false, lines)
+end
+
+local function append_message(target_buf, role, content)
+	local prefix = role == "user" and "You" or "Assistant"
+	local lines = vim.split(content or "", "\n", { plain = true })
+	if #lines == 0 then
+		lines = { "" }
+	end
+
+	local out = { prefix .. ": " .. lines[1] }
+	for i = 2, #lines do
+		table.insert(out, "  " .. lines[i])
+	end
+	table.insert(out, "")
+	append_lines(target_buf, out)
+end
+
+local function read_context_entry(entry)
+	if entry.bufnr and utils.is_buf_valid(entry.bufnr) then
+		return vim.api.nvim_buf_get_lines(entry.bufnr, 0, -1, false)
+	end
+
+	if entry.path and vim.fn.filereadable(entry.path) == 1 then
+		return vim.fn.readfile(entry.path)
+	end
+
+	return nil
+end
+
+local function build_context_message(state)
+	local context = state.context or {}
+	if #context == 0 then
+		return nil
+	end
+
+	local lines = { "Context files (read-only):" }
+	local remaining = context_opts.max_total_lines or 0
+	local has_limit = remaining > 0
+
+	for _, entry in ipairs(context) do
+		if has_limit and remaining <= 0 then
+			break
+		end
+
+		local content_lines = read_context_entry(entry)
+		if content_lines and #content_lines > 0 then
+			local header = "File: " .. entry.path
+			table.insert(lines, header)
+			table.insert(lines, "```")
+
+			local max_lines = context_opts.max_lines_per_file or #content_lines
+			if has_limit then
+				max_lines = math.min(max_lines, remaining)
+			end
+			local limit = math.min(#content_lines, max_lines)
+			for i = 1, limit do
+				table.insert(lines, content_lines[i])
+			end
+
+			table.insert(lines, "```")
+			table.insert(lines, "")
+
+			if has_limit then
+				remaining = remaining - limit
+			end
+		end
+	end
+
+	if #lines == 1 then
+		return nil
+	end
+
+	return {
+		role = "system",
+		content = table.concat(lines, "\n"),
+	}
+end
+
+local function build_request_messages(state)
+	local messages = vim.deepcopy(state.messages)
+	local context_message = build_context_message(state)
+	if not context_message then
+		return messages
+	end
+
+	local insert_at = 1
+	if #messages > 0 and messages[1].role == "system" then
+		insert_at = 2
+	end
+	table.insert(messages, insert_at, context_message)
+	return messages
+end
+
+local function scroll_chat_to_bottom()
+	if utils.is_win_valid(win) and utils.is_buf_valid(buf) then
+		local line_count = vim.api.nvim_buf_line_count(buf)
+		vim.api.nvim_win_set_cursor(win, { line_count, 0 })
+	end
+end
+
+local function request_chat(payload)
+	local body = vim.fn.json_encode(payload)
+	local cmd = build_curl_cmd("/api/chat", true)
+	local output, err = run_command(cmd, body)
+	if not output then
+		return nil, err or "Failed to contact Ollama"
+	end
+
+	local ok, data = pcall(vim.fn.json_decode, output)
+	if not ok or type(data) ~= "table" then
+		return nil, "Invalid response from Ollama"
+	end
+
+	if data.message and data.message.content then
+		return data.message.content, nil
+	end
+
+	return nil, "Empty response from Ollama"
+end
+
+local function reset_prompt()
+	if utils.is_buf_valid(input_buf) then
+		vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, {})
+		vim.fn.prompt_setprompt(input_buf, "› ")
+	end
+end
+
+local function send_message(text)
+	if not utils.is_buf_valid(buf) then
+		return
+	end
+
+	local trimmed = vim.trim(text or "")
+	if trimmed == "" then
+		return
+	end
+
+	local model = ensure_model_for_chat(buf)
+	if not model then
+		vim.notify("No Ollama models available", vim.log.levels.WARN)
+		return
+	end
+
+	local state = get_chat_state(buf)
+	append_message(buf, "user", trimmed)
+	table.insert(state.messages, { role = "user", content = trimmed })
+	scroll_chat_to_bottom()
+
+	local response, err = request_chat({
+		model = model,
+		messages = build_request_messages(state),
+		stream = false,
+	})
+
+	if not response then
+		append_message(buf, "assistant", "Error: " .. (err or "request failed"))
+		scroll_chat_to_bottom()
+		return
+	end
+
+	table.insert(state.messages, { role = "assistant", content = response })
+	append_message(buf, "assistant", response)
+	scroll_chat_to_bottom()
+end
+
+local function ensure_input_buf()
+	if utils.is_buf_valid(input_buf) then
+		return
+	end
+
+	input_buf = vim.api.nvim_create_buf(false, true)
+	vim.bo[input_buf].buftype = "prompt"
+	vim.bo[input_buf].bufhidden = "hide"
+	vim.bo[input_buf].buflisted = false
+	vim.bo[input_buf].swapfile = false
+	vim.bo[input_buf].filetype = "llm_chat_input"
+	vim.fn.prompt_setprompt(input_buf, "› ")
+
+	vim.fn.prompt_setcallback(input_buf, function(text)
+		vim.schedule(function()
+			send_message(text)
+			reset_prompt()
+			if utils.is_win_valid(input_win) then
+				vim.api.nvim_set_current_win(input_win)
+				vim.cmd("startinsert")
+			end
+		end)
+	end)
+end
+
+prune_chats = function()
+	local next_list = {}
+	for _, chat_buf in ipairs(chats) do
+		if is_chat_buf(chat_buf) then
+			table.insert(next_list, chat_buf)
+		end
+	end
+	chats = next_list
+
+	current_index = nil
+	if is_chat_buf(buf) then
+		for i, chat_buf in ipairs(chats) do
+			if chat_buf == buf then
+				current_index = i
+				break
+			end
+		end
+	end
+
+	if not current_index and #chats > 0 then
+		current_index = #chats
+		buf = chats[current_index]
+	elseif not current_index then
+		buf = nil
+	end
+end
+
+local function add_chat(chat_buf)
+	for i, existing in ipairs(chats) do
+		if existing == chat_buf then
+			current_index = i
+			buf = chat_buf
+			return
+		end
+	end
+
+	table.insert(chats, chat_buf)
+	current_index = #chats
+	buf = chat_buf
+end
+
+local function remove_chat(chat_buf)
+	local removed_index = nil
+	for i, existing in ipairs(chats) do
+		if existing == chat_buf then
+			table.remove(chats, i)
+			removed_index = i
+			break
+		end
+	end
+
+	if not removed_index then
+		return
+	end
+
+	if #chats == 0 then
+		current_index = nil
+		buf = nil
+		return
+	end
+
+	if current_index then
+		if removed_index < current_index then
+			current_index = current_index - 1
+		elseif removed_index == current_index and current_index > #chats then
+			current_index = #chats
+		end
+	end
+
+	if current_index then
+		buf = chats[current_index]
+	end
+end
+
+local function build_context_chips()
+	if not is_chat_buf(buf) then
+		return ""
+	end
+
+	local state = get_chat_state(buf)
+	local context = state.context or {}
+	if #context == 0 then
+		return ""
+	end
+
+	local parts = { "Ctx:" }
+	for i, entry in ipairs(context) do
+		local label = truncate_label(entry.label or entry.path)
+		label = escape_statusline(label)
+		local hl = "%#TabLine#"
+		local close_click = string.format("%%%d@v:lua.LlmChatRemoveContext@", i)
+		table.insert(parts, hl .. " " .. label .. " " .. close_click .. "x" .. "%X" .. "%#WinBar#")
+	end
+
+	return table.concat(parts, " ")
+end
+
+local function build_tabline()
+	local total = #chats
+	if total <= 1 then
+		return ""
+	end
+
+	local parts = {}
+	for i = 1, total do
+		local hl = (i == current_index) and "%#TabLineSel#" or "%#TabLine#"
+		local click = string.format("%%%d@v:lua.LlmChatTabClick@", i)
+		local close_click = string.format("%%%d@v:lua.LlmChatTabClose@", i)
+		table.insert(parts, hl .. click .. " " .. i .. " " .. "%X")
+		table.insert(parts, hl .. close_click .. " x " .. "%X")
+	end
+	table.insert(parts, "%#WinBar#")
+	return table.concat(parts, "")
+end
+
+local function build_close_button(index)
+	if not index then
+		return ""
+	end
+
+	local hl = "%#TabLineSel#"
+	local click = string.format("%%%d@v:lua.LlmChatTabClose@", index)
+	return hl .. click .. " x " .. "%X" .. "%#WinBar#"
+end
+
+local function build_hints()
+	local parts = {
+		"[Esc] hide",
+		"[q] close",
+	}
+
+	if keybinds.add_buffer then
+		table.insert(parts, "[" .. keybinds.add_buffer .. "] add buf")
+	end
+	if keybinds.add_buffers then
+		table.insert(parts, "[" .. keybinds.add_buffers .. "] add bufs")
+	end
+	if keybinds.new then
+		table.insert(parts, "[" .. keybinds.new .. "] new")
+	end
+	if keybinds.prev then
+		table.insert(parts, "[" .. keybinds.prev .. "] prev")
+	end
+	if keybinds.next then
+		table.insert(parts, "[" .. keybinds.next .. "] next")
+	end
+
+	return table.concat(parts, "  ")
+end
+
+local function set_chat_winbar()
+	if not utils.is_win_valid(win) then
+		return
+	end
+
+	prune_chats()
+
+	local label = " Chat "
+	local tabs = build_tabline()
+	local close_button = ""
+	if #chats == 1 and current_index then
+		close_button = " " .. build_close_button(current_index)
+	end
+	local winbar = label .. close_button .. tabs .. "%=" .. build_hints()
+	vim.api.nvim_set_option_value("winbar", winbar, { win = win })
+end
+
+set_input_winbar = function()
+	if not utils.is_win_valid(input_win) then
+		return
+	end
+	if not is_chat_buf(buf) then
+		return
+	end
+
+	local chips = build_context_chips()
+	local model = ensure_model_for_chat(buf) or "no-model"
+	local click = "%@v:lua.LlmChatModelSelect@" .. "Model: " .. escape_statusline(model) .. " ▼" .. "%X"
+	local right = click .. "  [Enter] send"
+	local winbar = chips
+	if chips ~= "" then
+		winbar = winbar .. " "
+	end
+	winbar = winbar .. "%=" .. right
+	vim.api.nvim_set_option_value("winbar", winbar, { win = input_win })
+end
+
+close = function()
+	if utils.is_win_valid(input_win) then
+		vim.api.nvim_win_close(input_win, true)
+		input_win = nil
+	end
+
+	if utils.is_win_valid(win) then
+		vim.api.nvim_win_close(win, true)
+		win = nil
+	end
+
+	vim.cmd("stopinsert")
+	vim.schedule(focus_last_target)
+end
+
+local function delete()
+	local target_buf = buf
+	prune_chats()
+	local keep_window = utils.is_win_valid(win) and #chats > 1
+
+	if not keep_window then
+		if utils.is_win_valid(input_win) then
+			vim.api.nvim_win_close(input_win, true)
+			input_win = nil
+		end
+		if utils.is_win_valid(win) then
+			vim.api.nvim_win_close(win, true)
+			win = nil
+		end
+	end
+
+	if utils.is_buf_valid(target_buf) then
+		vim.api.nvim_buf_delete(target_buf, { force = true })
+	end
+
+	remove_chat(target_buf)
+	chat_state[target_buf] = nil
+
+	if keep_window and is_chat_buf(buf) then
+		show_current()
+		return
+	end
+
+	vim.cmd("stopinsert")
+	vim.schedule(focus_last_target)
+end
+
+local function buf_keybinds(target_buf)
+	local opts = { buffer = target_buf, silent = true }
+	vim.keymap.set("n", "<Esc>", function()
+		close()
+	end, opts)
+	vim.keymap.set("n", "q", function()
+		delete()
+	end, opts)
+end
+
+local function input_keybinds()
+	if not utils.is_buf_valid(input_buf) then
+		return
+	end
+
+	local opts = { buffer = input_buf, silent = true }
+	vim.keymap.set("n", "<Esc>", function()
+		close()
+	end, opts)
+	vim.keymap.set("n", "q", function()
+		delete()
+	end, opts)
+end
+
+local function ensure_windows()
+	if utils.is_win_valid(win) and utils.is_win_valid(input_win) then
+		return
+	end
+
+	if utils.is_win_valid(win) then
+		vim.api.nvim_set_current_win(win)
+	else
+		win = utils.create_right_win(buf, win, {
+			width = resolve_width(),
+			focus = true,
+		})
+	end
+
+	if utils.is_win_valid(win) then
+		vim.api.nvim_win_set_buf(win, buf)
+		vim.api.nvim_set_current_win(win)
+	end
+
+	ensure_input_buf()
+
+	if not utils.is_win_valid(input_win) then
+		vim.cmd("belowright split")
+		input_win = vim.api.nvim_get_current_win()
+		vim.api.nvim_win_set_height(input_win, panel_opts.input_height)
+	end
+
+	if utils.is_win_valid(input_win) then
+		vim.api.nvim_win_set_buf(input_win, input_buf)
+	end
+end
+
+show_current = function()
+	if not is_chat_buf(buf) then
+		return
+	end
+
+	ensure_windows()
+
+	vim.bo[buf].bufhidden = "hide"
+	vim.bo[buf].buflisted = false
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].filetype = "markdown"
+	vim.bo[buf].modifiable = true
+
+	set_chat_winbar()
+	set_input_winbar()
+	buf_keybinds(buf)
+	input_keybinds()
+
+	if utils.is_win_valid(input_win) then
+		vim.api.nvim_set_current_win(input_win)
+		vim.cmd("startinsert")
+	end
+end
+
+local function open_new()
+	remember_focus()
+	prune_chats()
+	ensure_models(false)
+
+	buf = utils.create_scratch_buf(nil)
+	vim.b[buf].llm_chat = true
+	vim.bo[buf].bufhidden = "hide"
+	vim.bo[buf].buflisted = false
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].filetype = "markdown"
+	vim.bo[buf].modifiable = true
+	add_chat(buf)
+
+	ensure_windows()
+	set_chat_winbar()
+	set_input_winbar()
+	buf_keybinds(buf)
+	input_keybinds()
+
+	if utils.is_win_valid(input_win) then
+		vim.api.nvim_set_current_win(input_win)
+		vim.cmd("startinsert")
+	end
+end
+
+local function open_win()
+	remember_focus()
+	prune_chats()
+	ensure_models(false)
+
+	if not is_chat_buf(buf) then
+		if #chats == 0 then
+			open_new()
+			return
+		end
+		current_index = #chats
+		buf = chats[current_index]
+	end
+
+	show_current()
+end
+
+local function cycle_chat(direction)
+	remember_focus()
+	prune_chats()
+
+	if #chats == 0 then
+		open_new()
+		return
+	end
+
+	if not current_index then
+		current_index = #chats
+	end
+
+	local total = #chats
+	current_index = ((current_index - 1 + direction) % total) + 1
+	buf = chats[current_index]
+	show_current()
+end
+
+local function next_chat()
+	cycle_chat(1)
+end
+
+local function prev_chat()
+	cycle_chat(-1)
+end
+
+chat_tab_click = function(minwid, clicks, button, mods)
+	if button ~= "l" then
+		return
+	end
+
+	prune_chats()
+	local index = tonumber(minwid)
+	if not index or index < 1 or index > #chats then
+		return
+	end
+
+	current_index = index
+	buf = chats[current_index]
+	show_current()
+end
+
+chat_tab_close = function(minwid, clicks, button, mods)
+	if button ~= "l" then
+		return
+	end
+
+	prune_chats()
+	local index = tonumber(minwid)
+	if not index or index < 1 or index > #chats then
+		return
+	end
+
+	local target_buf = chats[index]
+	local target_is_current = target_buf == buf
+
+	if utils.is_buf_valid(target_buf) then
+		vim.api.nvim_buf_delete(target_buf, { force = true })
+	end
+
+	remove_chat(target_buf)
+	chat_state[target_buf] = nil
+
+	if #chats == 0 then
+		close()
+		return
+	end
+
+	if target_is_current then
+		show_current()
+		return
+	end
+
+	if utils.is_win_valid(win) then
+		set_chat_winbar()
+	end
+end
+
+chat_model_select = function()
+	if not is_chat_buf(buf) then
+		return
+	end
+
+	ensure_models(true)
+	if #models == 0 then
+		vim.notify("No Ollama models found", vim.log.levels.WARN)
+		return
+	end
+
+	vim.ui.select(models, { prompt = "Select model" }, function(choice)
+		if not choice then
+			return
+		end
+		local state = get_chat_state(buf)
+		state.model = choice
+		set_input_winbar()
+	end)
+end
+
+chat_context_remove = function(minwid, clicks, button, mods)
+	if button ~= "l" then
+		return
+	end
+
+	if not is_chat_buf(buf) then
+		return
+	end
+
+	local state = get_chat_state(buf)
+	local index = tonumber(minwid)
+	if not index or not state.context or not state.context[index] then
+		return
+	end
+
+	table.remove(state.context, index)
+	set_input_winbar()
+end
+
+function M.setup(config)
+	if type(config) == "string" then
+		config = { keybind = config }
+	end
+	config = config or {}
+
+	_G.LlmChatTabClick = chat_tab_click
+	_G.LlmChatTabClose = chat_tab_close
+	_G.LlmChatModelSelect = chat_model_select
+	_G.LlmChatRemoveContext = chat_context_remove
+
+	if config.keybind ~= nil then
+		keybinds.open = config.keybind
+	end
+	if config.new_keybind ~= nil then
+		keybinds.new = config.new_keybind
+	end
+	if config.prev_keybind ~= nil then
+		keybinds.prev = config.prev_keybind
+	end
+	if config.next_keybind ~= nil then
+		keybinds.next = config.next_keybind
+	end
+	if config.add_buffer_keybind ~= nil then
+		keybinds.add_buffer = config.add_buffer_keybind
+	end
+	if config.add_buffers_keybind ~= nil then
+		keybinds.add_buffers = config.add_buffers_keybind
+	end
+	if config.add_nvim_tree_keybind ~= nil then
+		keybinds.add_nvim_tree = config.add_nvim_tree_keybind
+	end
+	if config.add_telescope_keybind ~= nil then
+		keybinds.add_telescope = config.add_telescope_keybind
+	end
+
+	if config.width ~= nil then
+		panel_opts.width = config.width
+	end
+	if config.width_ratio ~= nil then
+		panel_opts.width_ratio = config.width_ratio
+	end
+	if config.max_width ~= nil then
+		panel_opts.max_width = config.max_width
+	end
+	if config.input_height ~= nil then
+		panel_opts.input_height = config.input_height
+	end
+	if config.context_max_files ~= nil then
+		context_opts.max_files = config.context_max_files
+	end
+	if config.context_max_lines ~= nil then
+		context_opts.max_lines_per_file = config.context_max_lines
+	end
+	if config.context_max_total_lines ~= nil then
+		context_opts.max_total_lines = config.context_max_total_lines
+	end
+	if config.context_max_label_len ~= nil then
+		context_opts.max_label_len = config.context_max_label_len
+	end
+
+	if config.ollama_host ~= nil then
+		ollama_opts.host = config.ollama_host
+	end
+	if config.ollama_container ~= nil then
+		ollama_opts.container = config.ollama_container
+	end
+	if config.default_model ~= nil then
+		ollama_opts.default_model = config.default_model
+	end
+	if config.system_prompt ~= nil then
+		ollama_opts.system_prompt = config.system_prompt
+	end
+
+	local opts = {
+		noremap = true,
+		silent = true,
+		desc = "Open LLM chat window",
+	}
+	if keybinds.open then
+		vim.keymap.set({ "n", "v" }, keybinds.open, open_win, opts)
+	end
+
+	if keybinds.new then
+		local create_opts = {
+			noremap = true,
+			silent = true,
+			desc = "Open new LLM chat window",
+		}
+		vim.keymap.set({ "n", "v" }, keybinds.new, open_new, create_opts)
+	end
+
+	if keybinds.prev then
+		local prev_opts = {
+			noremap = true,
+			silent = true,
+			desc = "Previous LLM chat",
+		}
+		vim.keymap.set({ "n", "v" }, keybinds.prev, prev_chat, prev_opts)
+	end
+
+	if keybinds.next then
+		local next_opts = {
+			noremap = true,
+			silent = true,
+			desc = "Next LLM chat",
+		}
+		vim.keymap.set({ "n", "v" }, keybinds.next, next_chat, next_opts)
+	end
+
+	if keybinds.add_buffer then
+		local add_opts = {
+			noremap = true,
+			silent = true,
+			desc = "Add current buffer to chat context",
+		}
+		vim.keymap.set({ "n", "v" }, keybinds.add_buffer, add_current_buffer_context, add_opts)
+	end
+
+	if keybinds.add_buffers then
+		local add_opts = {
+			noremap = true,
+			silent = true,
+			desc = "Add open buffers to chat context",
+		}
+		vim.keymap.set({ "n", "v" }, keybinds.add_buffers, add_open_buffers_context, add_opts)
+	end
+
+	if keybinds.add_nvim_tree then
+		local add_opts = {
+			noremap = true,
+			silent = true,
+			desc = "Add nvim-tree selection to chat context",
+		}
+		vim.keymap.set({ "n", "v" }, keybinds.add_nvim_tree, add_nvim_tree_context, add_opts)
+	end
+
+	if keybinds.add_telescope then
+		local add_opts = {
+			noremap = true,
+			silent = true,
+			desc = "Add telescope selection to chat context",
+		}
+		vim.keymap.set({ "n", "v" }, keybinds.add_telescope, add_telescope_context, add_opts)
+	end
+
+	vim.api.nvim_create_user_command("LlmChatAddBuffer", add_current_buffer_context, { force = true })
+	vim.api.nvim_create_user_command("LlmChatAddBuffers", add_open_buffers_context, { force = true })
+	vim.api.nvim_create_user_command("LlmChatAddNvimTree", add_nvim_tree_context, { force = true })
+	vim.api.nvim_create_user_command("LlmChatAddTelescope", function(opts)
+		add_telescope_context(tonumber(opts.args) or nil)
+	end, { force = true, nargs = "?" })
+end
+
+M.add_current_buffer = add_current_buffer_context
+M.add_open_buffers = add_open_buffers_context
+M.add_nvim_tree_selection = add_nvim_tree_context
+M.add_telescope_selection = add_telescope_context
+
+return M

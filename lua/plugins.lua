@@ -6,7 +6,16 @@ require("cmdline").setup(";")
 require("search").setup("/")
 require("terminal").setup({ keybind = "<leader>t", new_keybind = "<leader>T", prev_keybind = "[t", next_keybind = "]t" })
 -- require("llm").setup({ debounce_ms = 250, debug = true })
-require("llm_chat").setup({ keybind = "<leader>g", position = "rightbelow" })
+require("llm_chat").setup({
+	keybind = "<leader>g",
+	new_keybind = "<leader>G",
+	prev_keybind = "[g",
+	next_keybind = "]g",
+	add_buffer_keybind = "<leader>ga",
+	add_buffers_keybind = "<leader>gA",
+	add_nvim_tree_keybind = "<leader>gt",
+	add_telescope_keybind = "<leader>gf",
+})
 -- require("comment").setup("<leader>/")
 
 local symbols = require("symbols")
