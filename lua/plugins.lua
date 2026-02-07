@@ -4,8 +4,10 @@ vim.notify = require("notify").notify
 require("error_window").setup("<leader>b")
 require("cmdline").setup(";")
 require("search").setup("/")
-require("terminal").setup({ keybind = "<leader>t", new_keybind = "<leader>T", prev_keybind = "[t", next_keybind = "]t" })
+require("terminal").setup({ keybind = "<leader>t", new_keybind = "<leader>T", prev_keybind =
+"[t", next_keybind = "]t" })
 -- require("llm").setup({ debounce_ms = 250, debug = true })
+local llm_provider = vim.env.LLM_CHAT_PROVIDER or "ollama"
 require("llm_chat").setup({
 	keybind = "<leader>g",
 	new_keybind = "<leader>G",
@@ -15,6 +17,8 @@ require("llm_chat").setup({
 	add_buffers_keybind = "<leader>gA",
 	add_nvim_tree_keybind = "<leader>gt",
 	add_telescope_keybind = "<leader>gf",
+	model_selector_keybind = "<leader>gb",
+	provider = llm_provider,
 })
 -- require("comment").setup("<leader>/")
 
@@ -336,55 +340,73 @@ require("lazy").setup({
 	-- Copilot
 	{
 		"github/copilot.vim",
-		lazy = true,
 		cmd = "Copilot",
-		init = function()
-			vim.g.copilot_enabled = true
-			vim.notify("Copilot enabled: " .. vim.g.copilot_enabled)
-		end,
-		keys = {
-			{
-				"<leader>c",
-				function()
-					if vim.g.copilot_enabled == true then
-						vim.g.copilot_enabled = false
-						vim.notify("Copilot Disabled")
-					else
-						vim.g.copilot_enabled = true
-						vim.notify("Copilot Enabled")
-					end
-				end,
-			},
-		},
 	},
-
+	
 	-- Copilot Chat
 	{
 		"CopilotC-Nvim/CopilotChat.nvim",
 		dependencies = {
-			"nvim-lua/plenary.nvim",
-			"github/copilot.vim",
-		},
-		build = "make tiktoken",
-		lazy = true,
-		keys = {
-			{ "<leader>cp",  ":CopilotChat<CR>" },
-			{ "<leader>cpe", ":CopilotChatExplain<CR>" },
-			{ "<leader>cpf", ":CopilotChatFix<CR>" },
-			{ "<leader>cpo", ":CopilotChatOptimize<CR>" },
+			{ "github/copilot.vim" },
+			{ "nvim-lua/plenary.nvim" },
 		},
 		config = function()
-			require("CopilotChat").setup({
-				auto_insert_mode = true,
-				window = {
-					layout = "vertical",
-					border = "simple",
-					width = 0.25,
-				},
-				headers = {
-					user = "👤 Copilot Chat ",
-				},
-			})
+			require("CopilotChat").setup({})
 		end,
 	},
+
+	-- Copilot
+	-- {
+	-- 	"github/copilot.vim",
+	-- 	lazy = true,
+	-- 	cmd = "Copilot",
+	-- 	init = function()
+	-- 		vim.g.copilot_enabled = true
+	-- 		vim.notify("Copilot enabled: " .. vim.g.copilot_enabled)
+	-- 	end,
+	-- 	keys = {
+	-- 		{
+	-- 			"<leader>c",
+	-- 			function()
+	-- 				if vim.g.copilot_enabled == true then
+	-- 					vim.g.copilot_enabled = false
+	-- 					vim.notify("Copilot Disabled")
+	-- 				else
+	-- 					vim.g.copilot_enabled = true
+	-- 					vim.notify("Copilot Enabled")
+	-- 				end
+	-- 			end,
+	-- 		},
+	-- 	},
+	-- },
+
+	-- Copilot Chat
+	-- {
+	-- 	"CopilotC-Nvim/CopilotChat.nvim",
+	-- 	dependencies = {
+	-- 		"nvim-lua/plenary.nvim",
+	-- 		"github/copilot.vim",
+	-- 	},
+	-- 	build = "make tiktoken",
+	-- 	lazy = true,
+	-- 	keys = {
+	-- 		{ "<leader>cp",  ":CopilotChat<CR>" },
+	-- 		{ "<leader>cpe", ":CopilotChatExplain<CR>" },
+	-- 		{ "<leader>cpf", ":CopilotChatFix<CR>" },
+	-- 		{ "<leader>cpo", ":CopilotChatOptimize<CR>" },
+	-- 	},
+	-- 	config = function()
+	-- 		require("CopilotChat").setup({
+	-- 			auto_insert_mode = true,
+	-- 			window = {
+	-- 				layout = "vertical",
+	-- 				border = "simple",
+	-- 				width = 0.25,
+	-- 			},
+	-- 			headers = {
+	-- 				user = "👤 Copilot Chat ",
+	-- 			},
+	-- 		})
+	-- 	end,
+	-- },
 })

@@ -12,6 +12,8 @@ local last_buf = nil
 local models = {}
 local models_loaded = false
 local chat_state = {}
+local provider = "ollama"
+local bubble_ns = vim.api.nvim_create_namespace("llm_chat_bubbles")
 local keybinds = {
 	open = "<leader>g",
 	new = nil,
@@ -21,12 +23,13 @@ local keybinds = {
 	add_buffers = nil,
 	add_nvim_tree = nil,
 	add_telescope = nil,
+	model_selector = nil,
 }
 local panel_opts = {
 	width = nil,
 	width_ratio = 0.3,
 	max_width = 80,
-	input_height = 3,
+	input_height = 4,
 }
 local context_opts = {
 	max_files = 12,
@@ -40,6 +43,11 @@ local ollama_opts = {
 	default_model = nil,
 	system_prompt = nil,
 }
+local copilot_opts = {
+	default_model = nil,
+	system_prompt = nil,
+	sticky = nil,
+}
 
 local close
 local show_current
@@ -49,6 +57,7 @@ local chat_model_select
 local chat_context_remove
 local prune_chats
 local set_input_winbar
+local send_message
 
 local function resolve_width()
 	if panel_opts.width then
@@ -70,12 +79,89 @@ local function normalize_host()
 	return host
 end
 
+local function normalize_provider(value)
+	if value == "copilot" then
+		return "copilot"
+	end
+	if value == "ollama" then
+		return "ollama"
+	end
+	if value == "auto" then
+		local ok = pcall(require, "CopilotChat")
+		if ok then
+			return "copilot"
+		end
+		return "ollama"
+	end
+	return "ollama"
+end
+
 local function run_command(cmd, input)
 	local output = vim.fn.system(cmd, input)
 	if vim.v.shell_error ~= 0 then
 		return nil, output
 	end
 	return output, nil
+end
+
+local function run_command_async(cmd, input, callback)
+	if vim.system then
+		local opts = { text = true }
+		if input then
+			opts.stdin = input
+		end
+		vim.system(cmd, opts, function(result)
+			local stdout = result.stdout or ""
+			local stderr = result.stderr or ""
+			if result.code ~= 0 then
+				callback(nil, stderr ~= "" and stderr or stdout)
+				return
+			end
+			callback(stdout, nil)
+		end)
+		return
+	end
+
+	local stdout = {}
+	local stderr = {}
+	local job_id = vim.fn.jobstart(cmd, {
+		stdout_buffered = true,
+		stderr_buffered = true,
+		on_stdout = function(_, data)
+			if not data then
+				return
+			end
+			for _, line in ipairs(data) do
+				if line ~= "" then
+					table.insert(stdout, line)
+				end
+			end
+		end,
+		on_stderr = function(_, data)
+			if not data then
+				return
+			end
+			for _, line in ipairs(data) do
+				if line ~= "" then
+					table.insert(stderr, line)
+				end
+			end
+		end,
+		on_exit = function(_, code)
+			local out = table.concat(stdout, "\n")
+			local err = table.concat(stderr, "\n")
+			if code ~= 0 then
+				callback(nil, err ~= "" and err or out)
+				return
+			end
+			callback(out, nil)
+		end,
+	})
+
+	if input and job_id > 0 then
+		vim.fn.chansend(job_id, input)
+		vim.fn.chanclose(job_id, "stdin")
+	end
 end
 
 local function build_curl_cmd(path, use_stdin)
@@ -153,7 +239,7 @@ local function parse_models_from_ollama_list(raw)
 	return list
 end
 
-local function fetch_models()
+local function fetch_models(silent)
 	local cmd = build_curl_cmd("/api/tags", false)
 	local output, err = run_command(cmd)
 	if output then
@@ -171,18 +257,18 @@ local function fetch_models()
 		end
 	end
 
-	if err and err ~= "" then
+	if err and err ~= "" and not silent then
 		vim.notify(err, vim.log.levels.WARN)
 	end
 	return {}
 end
 
-local function ensure_models(force)
+local function ensure_models(force, silent)
 	if models_loaded and not force then
 		return
 	end
 
-	models = fetch_models()
+	models = fetch_models(silent)
 	models_loaded = true
 end
 
@@ -192,6 +278,17 @@ end
 
 local function escape_statusline(text)
 	return (text or ""):gsub("%%", "%%%%")
+end
+
+local function ensure_bubble_highlights()
+	vim.api.nvim_set_hl(0, "LlmChatUserBubble", {
+		fg = "#ffffff",
+		bg = "#3b82f6",
+	})
+	vim.api.nvim_set_hl(0, "LlmChatAssistantBubble", {
+		fg = "#e5e7eb",
+		bg = "#1f2937",
+	})
 end
 
 local function truncate_label(text)
@@ -213,6 +310,119 @@ local function truncate_label(text)
 	end
 
 	return text:sub(1, max_len - 3) .. "..."
+end
+
+local function get_chat_width()
+	if utils.is_win_valid(win) then
+		return vim.api.nvim_win_get_width(win)
+	end
+	return vim.o.columns
+end
+
+local function wrap_line(line, width)
+	if width <= 0 then
+		return { line }
+	end
+
+	if #line <= width then
+		return { line }
+	end
+
+	local out = {}
+	local current = ""
+	for word in line:gmatch("%S+") do
+		if #word > width then
+			if current ~= "" then
+				table.insert(out, current)
+				current = ""
+			end
+			local start = 1
+			while start <= #word do
+				table.insert(out, word:sub(start, start + width - 1))
+				start = start + width
+			end
+		elseif current == "" then
+			current = word
+		elseif #current + 1 + #word <= width then
+			current = current .. " " .. word
+		else
+			table.insert(out, current)
+			current = word
+		end
+	end
+
+	if current ~= "" then
+		table.insert(out, current)
+	end
+
+	if #out == 0 then
+		table.insert(out, line:sub(1, width))
+	end
+
+	return out
+end
+
+local function wrap_text(text, width)
+	local lines = {}
+	for _, line in ipairs(vim.split(text or "", "\n", { plain = true })) do
+		local wrapped = wrap_line(line, width)
+		for _, chunk in ipairs(wrapped) do
+			table.insert(lines, chunk)
+		end
+	end
+
+	if #lines == 0 then
+		table.insert(lines, "")
+	end
+
+	return lines
+end
+
+local function build_bubble(role, content)
+	local win_width = get_chat_width()
+	local max_width = math.max(24, win_width - 6)
+	local padding = 2
+	local inner_width = math.max(8, max_width - (padding * 2))
+
+	local wrapped = wrap_text(content, inner_width)
+	local bubble_inner = 0
+	for _, line in ipairs(wrapped) do
+		if #line > bubble_inner then
+			bubble_inner = #line
+		end
+	end
+	if bubble_inner < 1 then
+		bubble_inner = 1
+	end
+
+	local bubble_width = bubble_inner + (padding * 2)
+	if bubble_width > max_width then
+		bubble_width = max_width
+	end
+
+	local lines = {}
+	local highlights = {}
+	for i, line in ipairs(wrapped) do
+		local trimmed = line
+		if #trimmed > bubble_inner then
+			trimmed = trimmed:sub(1, bubble_inner)
+		end
+
+		local pad_right = bubble_inner - #trimmed
+		local padded = string.rep(" ", padding) .. trimmed .. string.rep(" ", padding + pad_right)
+		local left_pad = 0
+		if role == "user" then
+			left_pad = math.max(0, max_width - bubble_width)
+		end
+		local full = string.rep(" ", left_pad) .. padded
+		table.insert(lines, full)
+		highlights[i] = {
+			start_col = left_pad,
+			end_col = left_pad + bubble_width,
+		}
+	end
+
+	return lines, highlights
 end
 
 local function remember_focus()
@@ -243,24 +453,53 @@ end
 
 local function get_chat_state(chat_buf)
 	if not chat_state[chat_buf] then
+		local active_provider = provider
+		local default_model = nil
+		if active_provider == "ollama" then
+			default_model = ollama_opts.default_model
+		elseif active_provider == "copilot" then
+			default_model = copilot_opts.default_model
+		end
 		chat_state[chat_buf] = {
 			messages = {},
-			model = ollama_opts.default_model,
+			model = default_model,
 			context = {},
+			provider = active_provider,
 		}
-		if ollama_opts.system_prompt then
+		if active_provider == "ollama" and ollama_opts.system_prompt then
 			table.insert(chat_state[chat_buf].messages, {
 				role = "system",
 				content = ollama_opts.system_prompt,
+			})
+		elseif active_provider == "copilot" and copilot_opts.system_prompt then
+			table.insert(chat_state[chat_buf].messages, {
+				role = "system",
+				content = copilot_opts.system_prompt,
 			})
 		end
 	end
 	return chat_state[chat_buf]
 end
 
+local function provider_for_state(state)
+	return state.provider or provider
+end
+
 local function ensure_model_for_chat(chat_buf)
-	ensure_models(false)
 	local state = get_chat_state(chat_buf)
+	local active_provider = provider_for_state(state)
+
+	if active_provider == "copilot" then
+		if state.model then
+			return state.model
+		end
+		if copilot_opts.default_model then
+			state.model = copilot_opts.default_model
+		end
+		return state.model
+	end
+
+	ensure_models(false)
 
 	if state.model then
 		return state.model
@@ -470,18 +709,55 @@ local function append_lines(target_buf, lines)
 end
 
 local function append_message(target_buf, role, content)
-	local prefix = role == "user" and "You" or "Assistant"
-	local lines = vim.split(content or "", "\n", { plain = true })
-	if #lines == 0 then
-		lines = { "" }
+	local text = content
+	if type(text) ~= "string" then
+		text = tostring(text or "")
 	end
 
-	local out = { prefix .. ": " .. lines[1] }
-	for i = 2, #lines do
-		table.insert(out, "  " .. lines[i])
+	local bubble_lines, highlights = build_bubble(role, text)
+	local start_line = vim.api.nvim_buf_line_count(target_buf)
+	vim.api.nvim_buf_set_lines(target_buf, start_line, start_line, false, bubble_lines)
+
+	local hl_group = role == "user" and "LlmChatUserBubble" or "LlmChatAssistantBubble"
+	for i, range in ipairs(highlights) do
+		local line = start_line + i - 1
+		vim.api.nvim_buf_add_highlight(target_buf, bubble_ns, hl_group, line, range.start_col, range.end_col)
 	end
-	table.insert(out, "")
-	append_lines(target_buf, out)
+
+	vim.api.nvim_buf_set_lines(target_buf, start_line + #bubble_lines, start_line + #bubble_lines, false, { "" })
+	return {
+		start = start_line,
+		finish = start_line + #bubble_lines,
+	}
+end
+
+local function replace_message(target_buf, range, role, content)
+	if not range then
+		return append_message(target_buf, role, content)
+	end
+
+	local text = content
+	if type(text) ~= "string" then
+		text = tostring(text or "")
+	end
+
+	local bubble_lines, highlights = build_bubble(role, text)
+	local start_line = range.start or 0
+	local finish_line = range.finish or start_line
+	vim.api.nvim_buf_clear_namespace(target_buf, bubble_ns, start_line, finish_line + 1)
+	vim.api.nvim_buf_set_lines(target_buf, start_line, finish_line + 1, false, bubble_lines)
+
+	local hl_group = role == "user" and "LlmChatUserBubble" or "LlmChatAssistantBubble"
+	for i, highlight in ipairs(highlights) do
+		local line = start_line + i - 1
+		vim.api.nvim_buf_add_highlight(target_buf, bubble_ns, hl_group, line, highlight.start_col, highlight.end_col)
+	end
+
+	vim.api.nvim_buf_set_lines(target_buf, start_line + #bubble_lines, start_line + #bubble_lines, false, { "" })
+	return {
+		start = start_line,
+		finish = start_line + #bubble_lines,
+	}
 end
 
 local function read_context_entry(entry)
@@ -560,6 +836,86 @@ local function build_request_messages(state)
 	return messages
 end
 
+local function parse_chat_response(output)
+	if not output or output == "" then
+		return nil, "Empty response from Ollama"
+	end
+
+	local ok, data = pcall(vim.fn.json_decode, output)
+	if ok and type(data) == "table" and data.message and data.message.content then
+		return data.message.content, nil
+	end
+
+	local last_content = nil
+	local lines = vim.split(output, "\n", { trimempty = true })
+	for _, line in ipairs(lines) do
+		local trimmed = vim.trim(line)
+		if trimmed ~= "" then
+			local ok_line, data_line = pcall(vim.fn.json_decode, trimmed)
+			if ok_line and type(data_line) == "table" and data_line.message and data_line.message.content then
+				last_content = data_line.message.content
+			end
+		end
+	end
+
+	if last_content then
+		return last_content, nil
+	end
+
+	local buffer = {}
+	local depth = 0
+	local in_string = false
+	local escape = false
+
+	for i = 1, #output do
+		local ch = output:sub(i, i)
+
+		if in_string then
+			table.insert(buffer, ch)
+			if escape then
+				escape = false
+			elseif ch == "\\" then
+				escape = true
+			elseif ch == "\"" then
+				in_string = false
+			end
+		else
+			if ch == "\"" then
+				in_string = true
+				if depth > 0 then
+					table.insert(buffer, ch)
+				end
+			elseif ch == "{" then
+				if depth == 0 then
+					buffer = { "{" }
+				else
+					table.insert(buffer, ch)
+				end
+				depth = depth + 1
+			elseif ch == "}" and depth > 0 then
+				table.insert(buffer, ch)
+				depth = depth - 1
+				if depth == 0 then
+					local chunk = table.concat(buffer)
+					buffer = {}
+					local ok_chunk, data_chunk = pcall(vim.fn.json_decode, chunk)
+					if ok_chunk and type(data_chunk) == "table" and data_chunk.message and data_chunk.message.content then
+						last_content = data_chunk.message.content
+					end
+				end
+			elseif depth > 0 then
+				table.insert(buffer, ch)
+			end
+		end
+	end
+
+	if last_content then
+		return last_content, nil
+	end
+
+	return nil, "Invalid response from Ollama"
+end
+
 local function scroll_chat_to_bottom()
 	if utils.is_win_valid(win) and utils.is_buf_valid(buf) then
 		local line_count = vim.api.nvim_buf_line_count(buf)
@@ -575,26 +931,128 @@ local function request_chat(payload)
 		return nil, err or "Failed to contact Ollama"
 	end
 
-	local ok, data = pcall(vim.fn.json_decode, output)
-	if not ok or type(data) ~= "table" then
-		return nil, "Invalid response from Ollama"
+	local response, parse_err = parse_chat_response(output)
+	if response then
+		return response, nil
+	end
+	return nil, parse_err or "Invalid response from Ollama"
+end
+
+local function request_chat_async(payload, callback)
+	local body = vim.fn.json_encode(payload)
+	local cmd = build_curl_cmd("/api/chat", true)
+	run_command_async(cmd, body, function(output, err)
+		if not output then
+			callback(nil, err or "Failed to contact Ollama")
+			return
+		end
+
+		local response, parse_err = parse_chat_response(output)
+		if response then
+			callback(response, nil)
+			return
+		end
+		callback(nil, parse_err or "Invalid response from Ollama")
+	end)
+end
+
+local function build_copilot_prompt(state)
+	local parts = {}
+
+	for _, msg in ipairs(state.messages or {}) do
+		local content = msg.content or ""
+		if msg.role == "user" then
+			table.insert(parts, "User: " .. content)
+		elseif msg.role == "assistant" then
+			table.insert(parts, "Assistant: " .. content)
+		end
 	end
 
-	if data.message and data.message.content then
-		return data.message.content, nil
+	return table.concat(parts, "\n")
+end
+
+local function build_copilot_sticky(state)
+	local sticky = {}
+	local seen = {}
+
+	if copilot_opts.sticky then
+		for _, item in ipairs(copilot_opts.sticky) do
+			if item and item ~= "" and not seen[item] then
+				table.insert(sticky, item)
+				seen[item] = true
+			end
+		end
 	end
 
-	return nil, "Empty response from Ollama"
+	for _, entry in ipairs(state.context or {}) do
+		if entry.path and entry.path ~= "" then
+			local token = "#file:" .. entry.path
+			if not seen[token] then
+				table.insert(sticky, token)
+				seen[token] = true
+			end
+		end
+	end
+
+	return sticky
+end
+
+local function request_copilot(prompt, model, state, callback)
+	local ok, copilot = pcall(require, "CopilotChat")
+	if not ok then
+		return nil, "CopilotChat.nvim not available"
+	end
+
+	local opts = {
+		callback = function(response)
+			if type(response) == "table" then
+				response = response.content
+			end
+			return callback(response)
+		end,
+		headless = true,
+	}
+	if model then
+		opts.model = model
+	end
+	if copilot_opts.system_prompt then
+		opts.system_prompt = copilot_opts.system_prompt
+	end
+	local sticky = build_copilot_sticky(state)
+	if #sticky > 0 then
+		opts.sticky = sticky
+	end
+
+	local ok_call, err = pcall(copilot.ask, prompt, opts)
+	if not ok_call then
+		return nil, err or "CopilotChat request failed"
+	end
+
+	return true, nil
 end
 
 local function reset_prompt()
 	if utils.is_buf_valid(input_buf) then
 		vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, {})
-		vim.fn.prompt_setprompt(input_buf, "› ")
 	end
 end
 
-local function send_message(text)
+local function send_input_buffer()
+	if not utils.is_buf_valid(input_buf) then
+		return
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(input_buf, 0, -1, false)
+	local text = table.concat(lines, "\n")
+	reset_prompt()
+	if utils.is_win_valid(input_win) then
+		vim.api.nvim_set_current_win(input_win)
+		vim.cmd("startinsert")
+	end
+	send_message(text)
+end
+
+send_message = function(text)
 	if not utils.is_buf_valid(buf) then
 		return
 	end
@@ -604,31 +1062,65 @@ local function send_message(text)
 		return
 	end
 
+	local state = get_chat_state(buf)
+	local active_provider = provider_for_state(state)
 	local model = ensure_model_for_chat(buf)
-	if not model then
+	if active_provider == "ollama" and not model then
 		vim.notify("No Ollama models available", vim.log.levels.WARN)
 		return
 	end
-
-	local state = get_chat_state(buf)
 	append_message(buf, "user", trimmed)
 	table.insert(state.messages, { role = "user", content = trimmed })
 	scroll_chat_to_bottom()
 
-	local response, err = request_chat({
+	if active_provider == "copilot" then
+		local prompt = build_copilot_prompt(state)
+		local ok, err = request_copilot(prompt, model, state, function(response)
+			vim.schedule(function()
+				if not response or response == "" then
+					append_message(buf, "assistant", "Error: empty response from Copilot")
+					scroll_chat_to_bottom()
+					return
+				end
+
+				table.insert(state.messages, { role = "assistant", content = response })
+				append_message(buf, "assistant", response)
+				scroll_chat_to_bottom()
+			end)
+			return response
+		end)
+
+		if not ok then
+			append_message(buf, "assistant", "Error: " .. (err or "request failed"))
+			scroll_chat_to_bottom()
+		end
+		return
+	end
+
+	local target_buf = buf
+	local placeholder_range = append_message(target_buf, "assistant", "…")
+	scroll_chat_to_bottom()
+	local payload = {
 		model = model,
 		messages = build_request_messages(state),
 		stream = false,
-	})
+	}
+
+	vim.cmd("redraw")
+
+	local response, err = request_chat(payload)
+	if not utils.is_buf_valid(target_buf) then
+		return
+	end
 
 	if not response then
-		append_message(buf, "assistant", "Error: " .. (err or "request failed"))
+		replace_message(target_buf, placeholder_range, "assistant", "Error: " .. (err or "request failed"))
 		scroll_chat_to_bottom()
 		return
 	end
 
 	table.insert(state.messages, { role = "assistant", content = response })
-	append_message(buf, "assistant", response)
+	replace_message(target_buf, placeholder_range, "assistant", response)
 	scroll_chat_to_bottom()
 end
 
@@ -638,23 +1130,11 @@ local function ensure_input_buf()
 	end
 
 	input_buf = vim.api.nvim_create_buf(false, true)
-	vim.bo[input_buf].buftype = "prompt"
+	vim.bo[input_buf].buftype = "nofile"
 	vim.bo[input_buf].bufhidden = "hide"
 	vim.bo[input_buf].buflisted = false
 	vim.bo[input_buf].swapfile = false
 	vim.bo[input_buf].filetype = "llm_chat_input"
-	vim.fn.prompt_setprompt(input_buf, "› ")
-
-	vim.fn.prompt_setcallback(input_buf, function(text)
-		vim.schedule(function()
-			send_message(text)
-			reset_prompt()
-			if utils.is_win_valid(input_win) then
-				vim.api.nvim_set_current_win(input_win)
-				vim.cmd("startinsert")
-			end
-		end)
-	end)
 end
 
 prune_chats = function()
@@ -832,10 +1312,15 @@ set_input_winbar = function()
 		return
 	end
 
+	local state = get_chat_state(buf)
+	local active_provider = provider_for_state(state)
 	local chips = build_context_chips()
 	local model = ensure_model_for_chat(buf) or "no-model"
+	if active_provider == "copilot" then
+		model = state.model or copilot_opts.default_model or "Copilot"
+	end
 	local click = "%@v:lua.LlmChatModelSelect@" .. "Model: " .. escape_statusline(model) .. " ▼" .. "%X"
-	local right = click .. "  [Enter] send"
+	local right = click .. "  [Enter] send (normal)"
 	local winbar = chips
 	if chips ~= "" then
 		winbar = winbar .. " "
@@ -913,6 +1398,9 @@ local function input_keybinds()
 	vim.keymap.set("n", "q", function()
 		delete()
 	end, opts)
+	vim.keymap.set("n", "<CR>", function()
+		send_input_buffer()
+	end, opts)
 end
 
 local function ensure_windows()
@@ -975,7 +1463,9 @@ end
 local function open_new()
 	remember_focus()
 	prune_chats()
-	ensure_models(false)
+	if provider == "ollama" then
+		ensure_models(false)
+	end
 
 	buf = utils.create_scratch_buf(nil)
 	vim.b[buf].llm_chat = true
@@ -1002,7 +1492,9 @@ end
 local function open_win()
 	remember_focus()
 	prune_chats()
-	ensure_models(false)
+	if provider == "ollama" then
+		ensure_models(false)
+	end
 
 	if not is_chat_buf(buf) then
 		if #chats == 0 then
@@ -1100,18 +1592,65 @@ chat_model_select = function()
 		return
 	end
 
-	ensure_models(true)
-	if #models == 0 then
-		vim.notify("No Ollama models found", vim.log.levels.WARN)
+	local state = get_chat_state(buf)
+	local active_provider = provider_for_state(state)
+	local items = {}
+
+	local function add_item(label, provider_name, model_name)
+		table.insert(items, {
+			label = label,
+			provider = provider_name,
+			model = model_name,
+		})
+	end
+
+	local silent = active_provider ~= "ollama"
+	ensure_models(true, silent)
+	if #models > 0 then
+		for _, model in ipairs(models) do
+			add_item("Ollama: " .. model, "ollama", model)
+		end
+	end
+
+	local has_copilot, copilot = pcall(require, "CopilotChat")
+	if has_copilot then
+		add_item("Copilot", "copilot", nil)
+	else
+		add_item("Copilot (not installed)", "copilot", nil)
+	end
+
+	if #items == 0 then
+		vim.notify("No models available", vim.log.levels.WARN)
 		return
 	end
 
-	vim.ui.select(models, { prompt = "Select model" }, function(choice)
+	vim.ui.select(items, {
+		prompt = "Select model",
+		format_item = function(item)
+			return item.label
+		end,
+	}, function(choice)
 		if not choice then
 			return
 		end
-		local state = get_chat_state(buf)
-		state.model = choice
+		if choice.provider == "copilot" then
+			if not has_copilot then
+				vim.notify("CopilotChat.nvim not available", vim.log.levels.WARN)
+				return
+			end
+			local ok_call, err = pcall(copilot.select_model)
+			if not ok_call then
+				vim.notify(err or "Copilot model selection failed", vim.log.levels.WARN)
+				return
+			end
+			state.provider = "copilot"
+			state.model = nil
+			set_input_winbar()
+			return
+		end
+
+		state.provider = "ollama"
+		state.model = choice.model
 		set_input_winbar()
 	end)
 end
@@ -1140,6 +1679,14 @@ function M.setup(config)
 		config = { keybind = config }
 	end
 	config = config or {}
+
+	ensure_bubble_highlights()
+	vim.api.nvim_create_autocmd("ColorScheme", {
+		group = vim.api.nvim_create_augroup("LlmChatHighlights", { clear = true }),
+		callback = function()
+			ensure_bubble_highlights()
+		end,
+	})
 
 	_G.LlmChatTabClick = chat_tab_click
 	_G.LlmChatTabClose = chat_tab_close
@@ -1170,6 +1717,9 @@ function M.setup(config)
 	if config.add_telescope_keybind ~= nil then
 		keybinds.add_telescope = config.add_telescope_keybind
 	end
+	if config.model_selector_keybind ~= nil then
+		keybinds.model_selector = config.model_selector_keybind
+	end
 
 	if config.width ~= nil then
 		panel_opts.width = config.width
@@ -1196,6 +1746,12 @@ function M.setup(config)
 		context_opts.max_label_len = config.context_max_label_len
 	end
 
+	if config.provider ~= nil then
+		provider = normalize_provider(config.provider)
+	else
+		provider = normalize_provider(provider)
+	end
+
 	if config.ollama_host ~= nil then
 		ollama_opts.host = config.ollama_host
 	end
@@ -1207,6 +1763,15 @@ function M.setup(config)
 	end
 	if config.system_prompt ~= nil then
 		ollama_opts.system_prompt = config.system_prompt
+	end
+	if config.copilot_model ~= nil then
+		copilot_opts.default_model = config.copilot_model
+	end
+	if config.copilot_system_prompt ~= nil then
+		copilot_opts.system_prompt = config.copilot_system_prompt
+	end
+	if config.copilot_sticky ~= nil then
+		copilot_opts.sticky = config.copilot_sticky
 	end
 
 	local opts = {
@@ -1279,6 +1844,15 @@ function M.setup(config)
 			desc = "Add telescope selection to chat context",
 		}
 		vim.keymap.set({ "n", "v" }, keybinds.add_telescope, add_telescope_context, add_opts)
+	end
+
+	if keybinds.model_selector then
+		local model_opts = {
+			noremap = true,
+			silent = true,
+			desc = "Select LLM model",
+		}
+		vim.keymap.set({ "n", "v" }, keybinds.model_selector, chat_model_select, model_opts)
 	end
 
 	vim.api.nvim_create_user_command("LlmChatAddBuffer", add_current_buffer_context, { force = true })
