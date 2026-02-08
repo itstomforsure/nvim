@@ -20,6 +20,11 @@ require("llm_chat").setup({
 	model_selector_keybind = "<leader>gb",
 	provider = llm_provider,
 })
+require("llm_inline").setup({
+	ollama_host = vim.env.OLLAMA_HOST,
+	ollama_container = vim.env.OLLAMA_CONTAINER,
+	accept_key = "<Tab>",
+})
 -- require("comment").setup("<leader>/")
 
 local symbols = require("symbols")
@@ -340,7 +345,10 @@ require("lazy").setup({
 	-- Copilot
 	{
 		"github/copilot.vim",
-		cmd = "Copilot",
+		event = "InsertEnter",
+		init = function()
+			vim.g.copilot_no_tab_map = true
+		end,
 	},
 	
 	-- Copilot Chat

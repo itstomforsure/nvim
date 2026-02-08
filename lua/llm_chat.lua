@@ -546,6 +546,55 @@ local function ensure_model_for_chat(chat_buf)
 	return state.model
 end
 
+local function notify_inline_provider(provider_name)
+	local ok, inline = pcall(require, "llm_inline")
+	if ok and type(inline.set_provider) == "function" then
+		inline.set_provider(provider_name)
+	end
+end
+
+function M.get_active_model(opts)
+	opts = opts or {}
+	local silent = opts.silent == true
+	local active_provider = provider
+	local chat_buf = nil
+
+	if is_chat_buf(buf) then
+		chat_buf = buf
+	elseif #chats > 0 then
+		chat_buf = chats[#chats]
+	end
+
+	if chat_buf and is_chat_buf(chat_buf) then
+		local state = get_chat_state(chat_buf)
+		active_provider = provider_for_state(state)
+		if active_provider == "ollama" then
+			ensure_models(false, true)
+		end
+		return ensure_model_for_chat(chat_buf), active_provider
+	end
+
+	if active_provider == "ollama" then
+		ensure_models(false, true)
+		if #models > 0 then
+			return models[1], active_provider
+		end
+		if ollama_opts.default_model then
+			return ollama_opts.default_model, active_provider
+		end
+		if not silent then
+			vim.notify("No Ollama models available", vim.log.levels.WARN)
+		end
+		return nil, active_provider
+	end
+
+	if active_provider == "copilot" then
+		return copilot_opts.default_model, active_provider
+	end
+
+	return nil, active_provider
+end
+
 local function ensure_active_chat()
 	prune_chats()
 	if is_chat_buf(buf) then
@@ -1675,12 +1724,14 @@ chat_model_select = function()
 			state.provider = "copilot"
 			state.model = nil
 			set_input_winbar()
+			notify_inline_provider(state.provider)
 			return
 		end
 
 		state.provider = "ollama"
 		state.model = choice.model
 		set_input_winbar()
+		notify_inline_provider(state.provider)
 	end)
 end
 
@@ -1802,6 +1853,8 @@ function M.setup(config)
 	if config.copilot_sticky ~= nil then
 		copilot_opts.sticky = config.copilot_sticky
 	end
+
+	notify_inline_provider(provider)
 
 	local opts = {
 		noremap = true,

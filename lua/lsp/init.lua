@@ -54,13 +54,19 @@ vim.api.nvim_create_autocmd("LspAttach", {
 	end,
 })
 
-vim.keymap.set("i", "Tab", function()
-	if vim.fn.pumvisible() == 1 then
-		return "<C-n>"
-	else
-		return "<Tab>"
+do
+	local ok, inline = pcall(require, "llm_inline")
+	local accept_key = ok and type(inline.get_accept_key) == "function" and inline.get_accept_key() or nil
+
+	if accept_key ~= "<Tab>" then
+		vim.keymap.set("i", "<Tab>", function()
+			if vim.fn.pumvisible() == 1 then
+				return "<C-n>"
+			end
+			return "<Tab>"
+		end, { expr = true })
 	end
-end, { expr = true })
+end
 
 vim.keymap.set("i", "<S-Tab>", function()
 	if vim.fn.pumvisible() == 1 then
