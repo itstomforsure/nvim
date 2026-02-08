@@ -14,6 +14,7 @@ local models_loaded = false
 local chat_state = {}
 local provider = "ollama"
 local bubble_ns = vim.api.nvim_create_namespace("llm_chat_bubbles")
+local provider_notified = { ollama = false, copilot = false }
 local keybinds = {
 	open = "<leader>g",
 	new = nil,
@@ -270,6 +271,37 @@ local function ensure_models(force, silent)
 
 	models = fetch_models(silent)
 	models_loaded = true
+end
+
+local function notify_once(kind, message)
+	if provider_notified[kind] then
+		return
+	end
+	provider_notified[kind] = true
+	vim.notify(message, vim.log.levels.WARN)
+end
+
+local function check_copilot_available()
+	local ok = pcall(require, "CopilotChat")
+	if ok then
+		return
+	end
+	notify_once("copilot", "CopilotChat.nvim not available. The chat will still open.")
+end
+
+local function check_ollama_models()
+	ensure_models(true, true)
+	if #models > 0 then
+		return
+	end
+	notify_once("ollama", "No Ollama models found. The chat will still open.")
+end
+
+local function notify_provider_status()
+	vim.defer_fn(function()
+		check_copilot_available()
+		check_ollama_models()
+	end, 10)
 end
 
 local function is_chat_buf(target_buf)
@@ -1463,9 +1495,6 @@ end
 local function open_new()
 	remember_focus()
 	prune_chats()
-	if provider == "ollama" then
-		ensure_models(false)
-	end
 
 	buf = utils.create_scratch_buf(nil)
 	vim.b[buf].llm_chat = true
@@ -1487,14 +1516,13 @@ local function open_new()
 		vim.api.nvim_set_current_win(input_win)
 		vim.cmd("startinsert")
 	end
+
+	notify_provider_status()
 end
 
 local function open_win()
 	remember_focus()
 	prune_chats()
-	if provider == "ollama" then
-		ensure_models(false)
-	end
 
 	if not is_chat_buf(buf) then
 		if #chats == 0 then
@@ -1506,6 +1534,7 @@ local function open_win()
 	end
 
 	show_current()
+	notify_provider_status()
 end
 
 local function cycle_chat(direction)
