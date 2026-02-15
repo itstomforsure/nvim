@@ -70,6 +70,13 @@ vim.keymap.set("n", "<leader>q", function()
 			vim.notify(tostring(err), vim.log.levels.ERROR)
 		end
 	end
+
+	local ok_bufferline, bufferline = pcall(require, "bufferline")
+	if ok_bufferline and type(bufferline.refresh) == "function" then
+		vim.schedule(function()
+			bufferline.refresh()
+		end)
+	end
 end, { desc = "Close buffer and keep layout" })
 
 -- Switch focus between explorer and editor

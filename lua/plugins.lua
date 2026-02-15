@@ -1,12 +1,12 @@
 local vim = vim
 
 vim.notify = require("notify").notify
+require("bufferline").setup()
 require("error_window").setup("<leader>b")
 require("cmdline").setup(";")
 require("search").setup("/")
 require("terminal").setup({ keybind = "<leader>t", new_keybind = "<leader>T", prev_keybind =
 "[t", next_keybind = "]t" })
--- require("llm").setup({ debounce_ms = 250, debug = true })
 local llm_provider = vim.env.LLM_CHAT_PROVIDER or "ollama"
 require("llm_chat").setup({
 	keybind = "<leader>g",
@@ -205,39 +205,39 @@ require("lazy").setup({
 	},
 
 	-- Buffer configuration
-	{
-		"akinsho/bufferline.nvim",
-		dependencies = "nvim-tree/nvim-web-devicons",
-		config = function()
-			require("bufferline").setup({
-				options = {
-					offsets = {
-						{
-							filetype = "NvimTree",
-							text = "File Explorer",
-							highlight = "Directory",
-							separator = true,
-						},
-					},
-					show_buffer_icons = true,
-					show_buffer_close_icons = true,
-					show_close_icon = true,
-					show_tab_indicators = true,
-					diagnostics = "nvim_lsp",
-					diagnostics_indicator = function(count, level)
-						local icon = level:match("error") and " " or " "
-						return " " .. icon .. count
-					end,
-					separator_style = "slant",
-					modified_icon = "●",
-					enforce_regular_tabs = false,
-					always_show_bufferline = true,
-					tab_size = 32,
-					max_name_length = 25,
-				},
-			})
-		end,
-	},
+	-- {
+	-- 	"akinsho/bufferline.nvim",
+	-- 	dependencies = "nvim-tree/nvim-web-devicons",
+	-- 	config = function()
+	-- 		require("bufferline").setup({
+	-- 			options = {
+	-- 				offsets = {
+	-- 					{
+	-- 						filetype = "NvimTree",
+	-- 						text = "File Explorer",
+	-- 						highlight = "Directory",
+	-- 						separator = true,
+	-- 					},
+	-- 				},
+	-- 				show_buffer_icons = true,
+	-- 				show_buffer_close_icons = true,
+	-- 				show_close_icon = true,
+	-- 				show_tab_indicators = true,
+	-- 				diagnostics = "nvim_lsp",
+	-- 				diagnostics_indicator = function(count, level)
+	-- 					local icon = level:match("error") and " " or " "
+	-- 					return " " .. icon .. count
+	-- 				end,
+	-- 				separator_style = "slant",
+	-- 				modified_icon = "●",
+	-- 				enforce_regular_tabs = false,
+	-- 				always_show_bufferline = true,
+	-- 				tab_size = 32,
+	-- 				max_name_length = 25,
+	-- 			},
+	-- 		})
+	-- 	end,
+	-- },
 
 	-- Bottom status bar
 	{
@@ -362,59 +362,4 @@ require("lazy").setup({
 			require("CopilotChat").setup({})
 		end,
 	},
-
-	-- Copilot
-	-- {
-	-- 	"github/copilot.vim",
-	-- 	lazy = true,
-	-- 	cmd = "Copilot",
-	-- 	init = function()
-	-- 		vim.g.copilot_enabled = true
-	-- 		vim.notify("Copilot enabled: " .. vim.g.copilot_enabled)
-	-- 	end,
-	-- 	keys = {
-	-- 		{
-	-- 			"<leader>c",
-	-- 			function()
-	-- 				if vim.g.copilot_enabled == true then
-	-- 					vim.g.copilot_enabled = false
-	-- 					vim.notify("Copilot Disabled")
-	-- 				else
-	-- 					vim.g.copilot_enabled = true
-	-- 					vim.notify("Copilot Enabled")
-	-- 				end
-	-- 			end,
-	-- 		},
-	-- 	},
-	-- },
-
-	-- Copilot Chat
-	-- {
-	-- 	"CopilotC-Nvim/CopilotChat.nvim",
-	-- 	dependencies = {
-	-- 		"nvim-lua/plenary.nvim",
-	-- 		"github/copilot.vim",
-	-- 	},
-	-- 	build = "make tiktoken",
-	-- 	lazy = true,
-	-- 	keys = {
-	-- 		{ "<leader>cp",  ":CopilotChat<CR>" },
-	-- 		{ "<leader>cpe", ":CopilotChatExplain<CR>" },
-	-- 		{ "<leader>cpf", ":CopilotChatFix<CR>" },
-	-- 		{ "<leader>cpo", ":CopilotChatOptimize<CR>" },
-	-- 	},
-	-- 	config = function()
-	-- 		require("CopilotChat").setup({
-	-- 			auto_insert_mode = true,
-	-- 			window = {
-	-- 				layout = "vertical",
-	-- 				border = "simple",
-	-- 				width = 0.25,
-	-- 			},
-	-- 			headers = {
-	-- 				user = "👤 Copilot Chat ",
-	-- 			},
-	-- 		})
-	-- 	end,
-	-- },
 })
