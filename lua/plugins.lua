@@ -58,7 +58,15 @@ require("lazy").setup({
 			explorer = { enabled = true },
 			indent = { enabled = true },
 			lazygit = { enabled = true },
-			picker = { enabled = true },
+			picker = {
+				enabled = true,
+				sources = {
+					explorer = {
+						hidden = true,
+						ignored = true,
+					},
+				},
+			},
 			statuscolumn = { enabled = true },
 			input = { enabled = true },
 			quickfile = { enabled = true },
