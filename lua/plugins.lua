@@ -5,27 +5,31 @@ require("bufferline").setup()
 require("error_window").setup("<leader>b")
 require("cmdline").setup(";")
 require("search").setup("/")
-require("terminal").setup({ keybind = "<leader>t", new_keybind = "<leader>T", prev_keybind =
-"[t", next_keybind = "]t" })
-local llm_provider = vim.env.LLM_CHAT_PROVIDER or "ollama"
-require("llm_chat").setup({
-	keybind = "<leader>g",
-	new_keybind = "<leader>G",
-	prev_keybind = "[g",
-	next_keybind = "]g",
-	add_buffer_keybind = "<leader>ga",
-	add_buffers_keybind = "<leader>gA",
-	add_nvim_tree_keybind = "<leader>gt",
-	add_telescope_keybind = "<leader>gf",
-	model_selector_keybind = "<leader>gb",
-	provider = llm_provider,
+require("terminal").setup({
+	keybind = "<leader>t",
+	new_keybind = "<leader>T",
+	prev_keybind =
+	"[t",
+	next_keybind = "]t"
 })
-require("llm_inline").setup({
-	ollama_host = vim.env.OLLAMA_HOST,
-	ollama_container = vim.env.OLLAMA_CONTAINER,
-	accept_key = "<Tab>",
-})
--- require("comment").setup("<leader>/")
+-- local llm_provider = vim.env.LLM_CHAT_PROVIDER or "ollama"
+-- require("llm_chat").setup({
+-- 	keybind = "<leader>g",
+-- 	new_keybind = "<leader>G",
+-- 	prev_keybind = "[g",
+-- 	next_keybind = "]g",
+-- 	add_buffer_keybind = "<leader>ga",
+-- 	add_buffers_keybind = "<leader>gA",
+-- 	add_nvim_tree_keybind = "<leader>gt",
+-- 	add_telescope_keybind = "<leader>gf",
+-- 	model_selector_keybind = "<leader>gb",
+-- 	provider = llm_provider,
+-- })
+-- require("llm_inline").setup({
+-- 	ollama_host = vim.env.OLLAMA_HOST,
+-- 	ollama_container = vim.env.OLLAMA_CONTAINER,
+-- 	accept_key = "<Tab>",
+-- })
 
 local symbols = require("symbols")
 
@@ -43,6 +47,112 @@ end
 vim.opt.rtp:prepend(lazy_path)
 
 require("lazy").setup({
+	-- Snacks
+	{
+		"folke/snacks.nvim",
+		priority = 1000,
+		lazy = false,
+		opts = {
+			bigfile = { enabled = true },
+			dashboard = { enabled = true },
+			explorer = { enabled = true },
+			indent = { enabled = true },
+			lagygit = { enabled = true },
+			picker = { enabled = true },
+			statuscolumn = { enabled = true },
+			input = { enabled = true },
+			quickfile = { enabled = true },
+			scope = { enabled = true },
+			scroll = { enabled = true },
+			words = { enabled = true },
+		},
+		keys = {
+			{
+				"<leader>e",
+				function()
+					local explorer = Snacks.picker.get({ source = "explorer" })
+						[1]
+					if explorer then
+						explorer:focus()
+					else
+						Snacks.explorer.open()
+					end
+				end,
+				desc = "Focus/Open File Explorer"
+			},
+			{
+				"<leader>E",
+				function() Snacks.explorer() end,
+				desc = "Toggle File Explorer"
+			},
+			{ "<leader>ff",      function() Snacks.picker.files() end,              desc = "Find Files" },
+			{ "<leader><space>", function() Snacks.picker.grep() end,               desc = "Grep" },
+			{ "<leader>fr",      function() Snacks.picker.lsp_references() end,     nowait = true,                     desc = "LSP References" },
+			{ "<leader>fd",      function() Snacks.picker.git_diff() end,           desc = "Git Diff (Hunks)" },
+			{ "<leader>fw",      function() Snacks.picker.grep_word() end,          desc = "Visual selection or word", mode = { "n", "x" } },
+
+			-- Git
+			{ "<leader>gg",      function() Snacks.lazygit() end,                   desc = "Lazygit" },
+			{ "<leader>gb",      function() Snacks.picker.git_branches() end,       desc = "Git Branches" },
+			{ "<leader>gl",      function() Snacks.picker.git_log() end,            desc = "Git Log" },
+			{ "<leader>gL",      function() Snacks.picker.git_log_line() end,       desc = "Git Log Line" },
+			{ "<leader>gs",      function() Snacks.picker.git_status() end,         desc = "Git Status" },
+			{ "<leader>gS",      function() Snacks.picker.git_stash() end,          desc = "Git Stash" },
+			{ "<leader>gd",      function() Snacks.picker.git_diff() end,           desc = "Git Diff (Hunks)" },
+			{ "<leader>gf",      function() Snacks.picker.git_log_file() end,       desc = "Git Log File" },
+
+			-- search
+			{ '<leader>hr',      function() Snacks.picker.registers() end,          desc = "Registers" },
+			{ '<leader>hs',      function() Snacks.picker.search_history() end,     desc = "Search History" },
+			{ "<leader>hu",      function() Snacks.picker.undo() end,               desc = "Undo History" },
+			{ "<leader>sa",      function() Snacks.picker.autocmds() end,           desc = "Autocmds" },
+			{ "<leader>sC",      function() Snacks.picker.commands() end,           desc = "Commands" },
+			{ "<leader>sd",      function() Snacks.picker.diagnostics() end,        desc = "Diagnostics" },
+			{ "<leader>sD",      function() Snacks.picker.diagnostics_buffer() end, desc = "Buffer Diagnostics" },
+			{ "<leader>sh",      function() Snacks.picker.highlights() end,         desc = "Highlights" },
+
+			-- Nice to haves
+			{ "<leader>sk",      function() Snacks.picker.keymaps() end,            desc = "Keymaps" },
+			{ "<leader>gB",      function() Snacks.gitbrowse() end,                 desc = "Git Browse",               mode = { "n", "v" } },
+		},
+		init = function()
+			vim.api.nvim_create_autocmd("User", {
+				pattern = "VeryLazy",
+				callback = function()
+					-- Setup some globals for debugging (lazy-loaded)
+					_G.dd = function(...)
+						Snacks.debug.inspect(...)
+					end
+					_G.bt = function()
+						Snacks.debug.backtrace()
+					end
+
+					-- Override print to use snacks for `:=` command
+					if vim.fn.has("nvim-0.11") == 1 then
+						vim._print = function(_, ...)
+							dd(...)
+						end
+					else
+						vim.print = _G.dd
+					end
+
+					-- Create some toggle mappings
+					Snacks.toggle.option("spell", { name = "Spelling" }):map(
+						"<leader>us")
+					Snacks.toggle.option("wrap", { name = "Wrap" }):map(
+						"<leader>uw")
+					Snacks.toggle.option("relativenumber",
+						{ name = "Relative Number" }):map("<leader>uL")
+					Snacks.toggle.diagnostics():map("<leader>ud")
+					Snacks.toggle.line_number():map("<leader>ul")
+					Snacks.toggle.indent():map("<leader>ug")
+					Snacks.toggle.dim():map("<leader>uD")
+					Snacks.toggle.treesitter():map("<leader>uT")
+				end,
+			})
+		end,
+	},
+
 	-- Treesitter
 	{
 		"nvim-treesitter/nvim-treesitter",
@@ -80,42 +190,13 @@ require("lazy").setup({
 				indent = { enable = true },
 				incremental_selection = {
 					enable = true,
-					keymaps = {
-						init_selection = "gnn", -- start selection
-						node_incremental = "grn", -- expand
-						scope_incremental = "grc", -- expand scope
-						node_decremental = "grm", -- shrink
-					},
 				},
 				rainbow = {
 					enable = true,
-					extended_mode = true, -- also highlight non-bracket delimiters like <>
+					extended_mode = true,
 					max_file_lines = nil,
 				},
 			})
-		end,
-	},
-
-	-- Telescope
-	{
-		"nvim-telescope/telescope.nvim",
-		dependencies = {
-			"nvim-lua/plenary.nvim",
-			{
-				"nvim-telescope/telescope-fzf-native.nvim",
-				build = "make",
-			},
-		},
-		keys = {
-			{ "<leader>ff", "<cmd>Telescope find_files<cr>" },
-			{ "<leader>fg", "<cmd>Telescope live_grep<cr>" },
-			{ "<leader>fr", "<cmd>Telescope lsp_references<cr>" },
-			{ "<leader>fb", "<cmd>Telescope buffers<cr>" },
-			{ "<leader>fh", "<cmd>Telescope help_tags<cr>" },
-		},
-		config = function()
-			local telescope = require("telescope")
-			pcall(telescope.load_extension, "fzf")
 		end,
 	},
 
@@ -132,26 +213,6 @@ require("lazy").setup({
 		},
 		keys = {
 			{ "<leader>/", mode = { "n", "v" } },
-		},
-	},
-
-	-- Explorer
-	{
-		"nvim-tree/nvim-tree.lua",
-		opts = {
-			sync_root_with_cwd = true,
-			respect_buf_cwd = true,
-			update_focused_file = {
-				enable = true,
-				update_root = true,
-				ignore_list = {},
-			},
-			view = {
-				width = 55,
-				side = "left",
-				adaptive_size = false,
-				number = false,
-			},
 		},
 	},
 
@@ -203,41 +264,6 @@ require("lazy").setup({
 			},
 		},
 	},
-
-	-- Buffer configuration
-	-- {
-	-- 	"akinsho/bufferline.nvim",
-	-- 	dependencies = "nvim-tree/nvim-web-devicons",
-	-- 	config = function()
-	-- 		require("bufferline").setup({
-	-- 			options = {
-	-- 				offsets = {
-	-- 					{
-	-- 						filetype = "NvimTree",
-	-- 						text = "File Explorer",
-	-- 						highlight = "Directory",
-	-- 						separator = true,
-	-- 					},
-	-- 				},
-	-- 				show_buffer_icons = true,
-	-- 				show_buffer_close_icons = true,
-	-- 				show_close_icon = true,
-	-- 				show_tab_indicators = true,
-	-- 				diagnostics = "nvim_lsp",
-	-- 				diagnostics_indicator = function(count, level)
-	-- 					local icon = level:match("error") and " " or " "
-	-- 					return " " .. icon .. count
-	-- 				end,
-	-- 				separator_style = "slant",
-	-- 				modified_icon = "●",
-	-- 				enforce_regular_tabs = false,
-	-- 				always_show_bufferline = true,
-	-- 				tab_size = 32,
-	-- 				max_name_length = 25,
-	-- 			},
-	-- 		})
-	-- 	end,
-	-- },
 
 	-- Bottom status bar
 	{
@@ -323,24 +349,31 @@ require("lazy").setup({
 		end,
 	},
 
-	-- Lazygit
+	-- Claude code
 	{
-		"kdheepak/lazygit.nvim",
-		lazy = false,
-		cmd = {
-			"LazyGit",
-			"LazyGitConfig",
-			"LazyGitCurrentFile",
-			"LazyGitFilter",
-			"LazyGitFilterCurrentFile",
-		},
-		dependencies = {
-			"nvim-lua/plenary.nvim",
-		},
+		"coder/claudecode.nvim",
+		dependencies = { "folke/snacks.nvim" },
+		config = true,
 		keys = {
-			{ "<leader>gg", ":LazyGit<cr>" },
+			{ "<leader>v",  "<cmd>ClaudeCode<cr>",            desc = "Toggle Claude" },
+			{ "<leader>vf", "<cmd>ClaudeCodeFocus<cr>",       desc = "Focus Claude" },
+			{ "<leader>vr", "<cmd>ClaudeCode --resume<cr>",   desc = "Resume Claude" },
+			{ "<leader>vc", "<cmd>ClaudeCode --continue<cr>", desc = "Continue Claude" },
+			{ "<leader>vm", "<cmd>ClaudeCodeSelectModel<cr>", desc = "Select Claude model" },
+			{ "<leader>vb", "<cmd>ClaudeCodeAdd %<cr>",       desc = "Add current buffer" },
+			{ "<leader>vs", "<cmd>ClaudeCodeSend<cr>",        mode = "v",                  desc = "Send to Claude" },
+			{
+				"<leader>vB",
+				"<cmd>ClaudeCodeTreeAdd<cr>",
+				desc = "Add file",
+				ft = { "NvimTree", "neo-tree", "oil", "minifiles", "netrw" },
+			},
+			-- Diff management
+			{ "<leader>vv", "<cmd>ClaudeCodeDiffAccept<cr>", desc = "Accept diff" },
+			{ "<leader>vd", "<cmd>ClaudeCodeDiffDeny<cr>",   desc = "Deny diff" },
 		},
 	},
+
 
 	-- Copilot
 	{
@@ -349,8 +382,27 @@ require("lazy").setup({
 		init = function()
 			vim.g.copilot_no_tab_map = true
 		end,
+		config = function()
+			-- Accept full suggestion
+			vim.keymap.set("i", "<C-l>", 'copilot#Accept("\\<CR>")', {
+				expr = true,
+				replace_keycodes = false,
+				desc = "Accept Copilot suggestion",
+			})
+			-- Accept next word only
+			vim.keymap.set("i", "<M-l>", "<Plug>(copilot-accept-word)",
+				{ desc = "Accept Copilot word" })
+			-- Dismiss suggestion
+			vim.keymap.set("i", "<C-]>", "<Plug>(copilot-dismiss)",
+				{ desc = "Dismiss Copilot suggestion" })
+			-- Cycle suggestions
+			vim.keymap.set("i", "<M-n>", "<Plug>(copilot-next)",
+				{ desc = "Next Copilot suggestion" })
+			vim.keymap.set("i", "<M-p>", "<Plug>(copilot-prev)",
+				{ desc = "Prev Copilot suggestion" })
+		end,
 	},
-	
+
 	-- Copilot Chat
 	{
 		"CopilotC-Nvim/CopilotChat.nvim",
@@ -358,8 +410,35 @@ require("lazy").setup({
 			{ "github/copilot.vim" },
 			{ "nvim-lua/plenary.nvim" },
 		},
+		event = "VeryLazy",
 		config = function()
-			require("CopilotChat").setup({})
+			require("CopilotChat").setup({
+				model = "gpt-4o",
+				window = {
+					layout = "vertical",
+					width = 0.4,
+				},
+			})
 		end,
+		keys = {
+			{ "<leader>cc", "<cmd>CopilotChatToggle<cr>",   desc = "Toggle Copilot Chat" },
+			{ "<leader>cm", "<cmd>CopilotChatModels<cr>",   desc = "Select Copilot Model" },
+			{ "<leader>ce", "<cmd>CopilotChatExplain<cr>",  mode = { "n", "v" },          desc = "Copilot Explain" },
+			{ "<leader>cf", "<cmd>CopilotChatFix<cr>",      mode = { "n", "v" },          desc = "Copilot Fix" },
+			{ "<leader>co", "<cmd>CopilotChatOptimize<cr>", mode = { "n", "v" },          desc = "Copilot Optimize" },
+			{ "<leader>cr", "<cmd>CopilotChatReview<cr>",   mode = { "n", "v" },          desc = "Copilot Review" },
+			{ "<leader>ct", "<cmd>CopilotChatTests<cr>",    mode = { "n", "v" },          desc = "Copilot Tests" },
+			{
+				"<leader>cq",
+				function()
+					local input = vim.fn.input("Quick Chat: ")
+					if input ~= "" then
+						require("CopilotChat").ask(input,
+							{ selection = require("CopilotChat.select").buffer })
+					end
+				end,
+				desc = "Copilot Quick Chat",
+			},
+		},
 	},
 })

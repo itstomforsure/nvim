@@ -46,7 +46,8 @@ vim.keymap.set("n", "<leader>q", function()
 	end
 
 	if vim.bo[current_buf].buftype == "terminal" then
-		vim.notify("Use terminal keymaps to close terminal buffers", vim.log.levels.INFO)
+		vim.notify("Use terminal keymaps to close terminal buffers",
+			vim.log.levels.INFO)
 		return
 	end
 
@@ -65,7 +66,8 @@ vim.keymap.set("n", "<leader>q", function()
 	end
 
 	if vim.api.nvim_buf_is_valid(current_buf) then
-		local ok, err = pcall(vim.api.nvim_buf_delete, current_buf, { force = false })
+		local ok, err = pcall(vim.api.nvim_buf_delete, current_buf,
+			{ force = false })
 		if not ok then
 			vim.notify(tostring(err), vim.log.levels.ERROR)
 		end
@@ -79,21 +81,21 @@ vim.keymap.set("n", "<leader>q", function()
 	end
 end, { desc = "Close buffer and keep layout" })
 
--- Switch focus between explorer and editor
-vim.keymap.set("n", "<leader>e", function()
-	local explorer = require("nvim-tree.api")
-
-	if vim.bo.filetype == "NvimTree" then
-		vim.cmd(":wincmd p")
-	else
-		explorer.tree.open()
-	end
-
-	explorer.tree.focus()
-end)
-
--- Toggle explorer
-vim.keymap.set("n", "<leader>E", ":NvimTreeToggle<CR>")
+-- -- Switch focus between explorer and editor
+-- vim.keymap.set("n", "<leader>e", function()
+-- 	local explorer = require("nvim-tree.api")
+--
+-- 	if vim.bo.filetype == "NvimTree" then
+-- 		vim.cmd(":wincmd p")
+-- 	else
+-- 		explorer.tree.open()
+-- 	end
+--
+-- 	explorer.tree.focus()
+-- end)
+--
+-- -- Toggle explorer
+-- vim.keymap.set("n", "<leader>E", ":NvimTreeToggle<CR>")
 
 -- Navigate between buffers
 vim.keymap.set("n", "<Tab>", ":bnext<CR>")

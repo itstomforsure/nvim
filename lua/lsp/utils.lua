@@ -14,7 +14,8 @@ end
 
 function M.find_project_root()
 	local current_dir = vim.fn.expand("%:p:h")
-	local root_markers = { "angular.json", "package.json", "project.json", ".git", ".editorconfig" }
+	local root_markers = { "angular.json", "package.json", "project.json", ".git",
+		".editorconfig" }
 
 	local function find_root(path)
 		for _, marker in ipairs(root_markers) do
@@ -36,9 +37,11 @@ end
 function M.detect_project_configs(root_dir)
 	local configs = {
 		editorconfig = vim.fn.filereadable(root_dir .. "/.editorconfig") == 1,
-		eslint = vim.fn.filereadable(root_dir .. "/.eslintrc.json") == 1 or vim.fn.filereadable(
+		eslint = vim.fn.filereadable(root_dir .. "/.eslintrc.json") == 1 or
+		vim.fn.filereadable(
 			root_dir .. "/.eslintrc.js"
-		) == 1 or vim.fn.filereadable(root_dir .. "/.eslintrc.yaml") == 1 or vim.fn.filereadable(
+		) == 1 or vim.fn.filereadable(root_dir .. "/.eslintrc.yaml") == 1 or
+		vim.fn.filereadable(
 			root_dir .. "/.eslintrc.yml"
 		) == 1 or vim.fn.filereadable(root_dir .. "/eslint.config.js") == 1,
 		prettier = vim.fn.filereadable(root_dir .. "/.prettierrc") == 1
@@ -74,9 +77,10 @@ function M.on_attach(client, bufnr)
 	vim.keymap.set("n", "<leader>R", vim.diagnostic.setloclist, opts)
 
 	if client.server_capabilities.inlayHintProvider then
-		vim.keymap.set("n", "<leader>ih", function()
+		vim.keymap.set("n", "<leader>uh", function()
 			vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled())
-			vim.notify(string.format("Inlay hints: %s", vim.lsp.inlay_hint.is_enabled() and "on" or "off"))
+			vim.notify(string.format("Inlay hints: %s",
+				vim.lsp.inlay_hint.is_enabled() and "on" or "off"))
 		end, opts)
 	end
 end
