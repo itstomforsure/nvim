@@ -90,12 +90,14 @@ end
 
 local function update_target_buf_highlight()
 	local match = search_list.matches[search_list.selected_id]
-	vim.api.nvim_win_set_cursor(vim.fn.win_getid(vim.fn.bufwinnr(target_buf)), { match.lnum, match.col - 1 })
+	vim.api.nvim_win_set_cursor(vim.fn.win_getid(vim.fn.bufwinnr(target_buf)),
+		{ match.lnum, match.col - 1 })
 end
 
 local function update_search_info_on_search_bar()
 	vim.api.nvim_buf_clear_namespace(search_bar.buf, -1, 0, -1)
-	vim.api.nvim_buf_set_extmark(search_bar.buf, vim.api.nvim_create_namespace("searchinfo"), 0, 0, {
+	vim.api.nvim_buf_set_extmark(search_bar.buf,
+		vim.api.nvim_create_namespace("searchinfo"), 0, 0, {
 		virt_text = { { search_list.selected_id .. "/" .. #search_list.matches .. " " } },
 		virt_text_pos = "right_align",
 	})
@@ -192,7 +194,8 @@ local function open_search_list_win()
 	}
 
 	search_list.buf = utils.create_scratch_buf(search_list.buf)
-	search_list.win = utils.create_floating_win(search_list.buf, search_list.win, search_list_win_opts)
+	search_list.win = utils.create_floating_win(search_list.buf, search_list.win,
+		search_list_win_opts)
 	vim.api.nvim_set_option_value("wrap", false, { win = search_list.win })
 end
 

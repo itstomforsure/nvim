@@ -11,8 +11,8 @@ local settings = {
 	autoindent = true,
 	smarttab = true,
 	cursorline = true,
-	textwidth = 80,
-	colorcolumn = "80",
+	textwidth = 120,
+	colorcolumn = "120",
 	wrap = true,
 	scrolloff = 5,
 	signcolumn = "yes",
@@ -27,6 +27,12 @@ local settings = {
 for key, value in pairs(settings) do
 	vim.opt[key] = value
 end
+
+-- Auto-reload files changed outside of Neovim
+vim.opt.autoread = true
+vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold", "CursorHoldI" }, {
+	command = "checktime",
+})
 
 vim.g.mapleader = " "
 vim.g.netrw_winsize = 25
