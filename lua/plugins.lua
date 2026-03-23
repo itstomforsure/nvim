@@ -57,7 +57,7 @@ require("lazy").setup({
 			dashboard = { enabled = true },
 			explorer = { enabled = true },
 			indent = { enabled = true },
-			lagygit = { enabled = true },
+			lazygit = { enabled = true },
 			picker = { enabled = true },
 			statuscolumn = { enabled = true },
 			input = { enabled = true },
