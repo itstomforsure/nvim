@@ -1,3 +1,7 @@
+-------------------------------------------------------------------------------
+-- Notify
+-------------------------------------------------------------------------------
+
 local vim = vim
 local symbols = require("symbols")
 local M = {}
@@ -93,7 +97,8 @@ function M.notify(msg, level)
 	vim.api.nvim_win_set_option(
 		win,
 		"winhl",
-		"Normal:NotifyBackground,NormalFloat:NotifyBackground,FloatBorder:" .. hl[level]
+		"Normal:NotifyBackground,NormalFloat:NotifyBackground,FloatBorder:" ..
+		hl[level]
 	)
 	vim.api.nvim_win_set_option(win, "winblend", 10)
 
@@ -159,7 +164,8 @@ vim.api.nvim_create_autocmd("BufWritePost", {
 		local lines = vim.api.nvim_buf_line_count(0)
 		local size = vim.fn.getfsize(vim.fn.expand("%:p"))
 
-		M.notify(string.format('"%s" %dL, %dB written', filename, lines, size), vim.log.levels.INFO)
+		M.notify(string.format('"%s" %dL, %dB written', filename, lines, size),
+			vim.log.levels.INFO)
 	end,
 })
 

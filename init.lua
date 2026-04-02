@@ -43,6 +43,4 @@ vim.diagnostic.config({
 })
 vim.cmd(":colorscheme vscode")
 
-require("keybindings")
-require("plugins")
-require("lsp")
+require("framework")
