@@ -46,7 +46,11 @@ local state = {
 	width = 40,
 	line_map = {},
 	branch = "",
+	ahead_count = 0,
+	commits = {},
+	has_changes = false,
 	sections = {
+		{ key = "commits",   label = "Commits",        items = {}, collapsed = false },
 		{ key = "staged",    label = "Staged Changes", items = {}, collapsed = false },
 		{ key = "changes",   label = "Changes",        items = {}, collapsed = false },
 		{ key = "untracked", label = "Untracked",      items = {}, collapsed = false },
@@ -91,12 +95,33 @@ local function parse_status()
 		sec.items = {}
 	end
 
-	state.branch = vim.fn.system("git branch --show-current 2>/dev/null"):gsub(
-		"\n", "")
+	state.branch = vim.fn.system("git branch --show-current 2>/dev/null"):gsub("\n", "")
 	if state.branch == "" then
 		state.branch = "detached"
 	end
 
+	-- Ahead count (unpushed commits)
+	local ahead_str = vim.fn.system(
+		"git rev-list --count @{upstream}..HEAD 2>/dev/null"):gsub("\n", "")
+	state.ahead_count = (vim.v.shell_error == 0) and tonumber(ahead_str) or 0
+
+	-- Unpushed commit list
+	state.commits = {}
+	if state.ahead_count > 0 then
+		local log = vim.fn.systemlist(
+			{ "git", "log", "@{upstream}..HEAD", "--pretty=format:%h|%s" })
+		if vim.v.shell_error == 0 then
+			for _, entry in ipairs(log) do
+				local hash, subject = entry:match("^(%S+)|(.*)$")
+				if hash then
+					table.insert(state.commits, { hash = hash, subject = subject })
+				end
+			end
+		end
+	end
+	get_section("commits").items = state.commits
+
+	-- File status
 	local output = vim.fn.systemlist("git status --porcelain=v1 2>/dev/null")
 	if vim.v.shell_error ~= 0 then return end
 
@@ -108,20 +133,21 @@ local function parse_status()
 			local display = path:match("-> (.+)$") or path
 
 			if x == "?" then
-				table.insert(get_section("untracked").items,
-					{ status = "?", file = display })
+				table.insert(get_section("untracked").items, { status = "?", file = display })
 			else
 				if x ~= " " then
-					table.insert(get_section("staged").items,
-						{ status = x, file = display })
+					table.insert(get_section("staged").items, { status = x, file = display })
 				end
 				if y ~= " " then
-					table.insert(get_section("changes").items,
-						{ status = y, file = display })
+					table.insert(get_section("changes").items, { status = y, file = display })
 				end
 			end
 		end
 	end
+
+	state.has_changes = #get_section("staged").items > 0
+		or #get_section("changes").items > 0
+		or #get_section("untracked").items > 0
 end
 
 -- Commit ---------------------------------------------------------------------
@@ -152,6 +178,32 @@ local function do_commit()
 		if state.input_buf and vim.api.nvim_buf_is_valid(state.input_buf) then
 			vim.api.nvim_buf_set_lines(state.input_buf, 0, -1, false, { "" })
 		end
+	end
+	M.refresh()
+end
+
+local function do_push()
+	if state.ahead_count == 0 then
+		vim.notify("Nothing to push", vim.log.levels.INFO)
+		return
+	end
+	vim.notify("Pushing to remote...", vim.log.levels.INFO)
+	local output = vim.fn.system("git push 2>&1")
+	if vim.v.shell_error ~= 0 then
+		vim.notify("Push failed: " .. vim.trim(output), vim.log.levels.ERROR)
+	else
+		vim.notify("Pushed " .. state.ahead_count .. " commit(s)", vim.log.levels.INFO)
+	end
+	M.refresh()
+end
+
+local function do_pull()
+	vim.notify("Pulling from remote...", vim.log.levels.INFO)
+	local output = vim.fn.system("git pull 2>&1")
+	if vim.v.shell_error ~= 0 then
+		vim.notify("Pull failed: " .. vim.trim(output), vim.log.levels.ERROR)
+	else
+		vim.notify(vim.trim(output), vim.log.levels.INFO)
 	end
 	M.refresh()
 end
@@ -204,9 +256,16 @@ function M.render()
 	local lnum = add(branch_text)
 	hl_line(lnum, "Title")
 
-	-- Commit button
-	local btn_text = "  ✓ Commit"
-	lnum = add(btn_text, { type = "button" })
+	-- Dynamic button: Sync or Commit
+	local btn_text, btn_type
+	if not state.has_changes and state.ahead_count > 0 then
+		btn_text = string.format("  ↑ Sync %d", state.ahead_count)
+		btn_type = "sync"
+	else
+		btn_text = "  ✓ Commit"
+		btn_type = "commit"
+	end
+	lnum = add(btn_text, { type = "button", action = btn_type })
 	table.insert(extmarks, { lnum, "SCButton" })
 
 	add("")
@@ -214,25 +273,46 @@ function M.render()
 	-- Sections
 	for _, sec in ipairs(state.sections) do
 		local chevron = sec.collapsed and " " or " "
-		local header = string.format(" %s %s (%d)", chevron, sec.label,
-			#sec.items)
+		local header = string.format(" %s %s (%d)", chevron, sec.label, #sec.items)
 		lnum = add(header, { type = "section", key = sec.key })
 		hl_line(lnum, "Directory")
 
 		if not sec.collapsed then
 			if #sec.items == 0 then
-				lnum = add("  └── No " .. sec.label:lower())
+				local empty_label = sec.key == "commits" and "No unpushed commits" or ("No " .. sec.label:lower())
+				lnum = add("  └── " .. empty_label)
 				hl_range(lnum, 0, #("  └── "), "NonText")
 				hl_range(lnum, #("  └── "), -1, "Comment")
-			else
+			elseif sec.key == "commits" then
+				-- Render commit items
 				for i, item in ipairs(sec.items) do
 					local is_last = (i == #sec.items)
-					local branch = is_last and "└── " or "├── "
+					local connector = is_last and "└── " or "├── "
+					local prefix = "  " .. connector
+					local text = prefix .. item.hash .. " " .. item.subject
+
+					lnum = add(text, {
+						type = "commit",
+						hash = item.hash,
+						subject = item.subject,
+					})
+
+					-- Tree guide
+					hl_range(lnum, 0, #prefix, "NonText")
+					-- Hash
+					hl_range(lnum, #prefix, #prefix + #item.hash, "Function")
+					-- Subject
+					hl_range(lnum, #prefix + #item.hash + 1, -1, "Normal")
+				end
+			else
+				-- Render file items
+				for i, item in ipairs(sec.items) do
+					local is_last = (i == #sec.items)
+					local connector = is_last and "└── " or "├── "
 					local icon, icon_hl = file_icon(item.file)
 					local status_str = item.status
-					local prefix = "  " .. branch
-					local text = prefix ..
-						status_str .. " " .. icon .. " " .. item.file
+					local prefix = "  " .. connector
+					local text = prefix .. status_str .. " " .. icon .. " " .. item.file
 
 					lnum = add(text, {
 						type = "file",
@@ -248,8 +328,7 @@ function M.render()
 					-- Highlight status letter
 					local s_start = #prefix
 					local s_end = s_start + #status_str
-					hl_range(lnum, s_start, s_end,
-						STATUS_HL[item.status] or "Normal")
+					hl_range(lnum, s_start, s_end, STATUS_HL[item.status] or "Normal")
 
 					-- Highlight file icon
 					local i_start = s_end + 1
@@ -263,7 +342,7 @@ function M.render()
 	end
 
 	-- Help
-	lnum = add(" s:stage  S:all  r:refresh  q:close")
+	lnum = add(" s:stage  S:all  p:pull  P:push  r:refresh  q:close")
 	hl_line(lnum, "Comment")
 
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
@@ -427,8 +506,28 @@ local function activate_line()
 		vim.schedule(function()
 			M.show_diff(d.file, section)
 		end)
+	elseif d.type == "commit" then
+		vim.schedule(function()
+			local layout = require("layout")
+			local editor_win = layout.get_editor_win()
+			if editor_win then
+				vim.api.nvim_set_current_win(editor_win)
+			end
+			local diff = vim.fn.systemlist("git show --stat --patch " .. d.hash)
+			local scratch = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_lines(scratch, 0, -1, false, diff)
+			vim.bo[scratch].buftype = "nofile"
+			vim.bo[scratch].filetype = "git"
+			vim.bo[scratch].modifiable = false
+			vim.api.nvim_buf_set_name(scratch, d.hash .. " " .. d.subject)
+			vim.api.nvim_set_current_buf(scratch)
+		end)
 	elseif d.type == "button" then
-		do_commit()
+		if d.action == "sync" then
+			do_push()
+		else
+			do_commit()
+		end
 	end
 end
 
@@ -451,6 +550,9 @@ local function setup_list_keymaps()
 		vim.fn.system("git reset HEAD")
 		M.refresh()
 	end, o)
+
+	vim.keymap.set("n", "P", do_push, o)
+	vim.keymap.set("n", "p", do_pull, o)
 
 	vim.keymap.set("n", "r", function() M.refresh() end, o)
 	vim.keymap.set("n", "q", function() M.close() end, o)
