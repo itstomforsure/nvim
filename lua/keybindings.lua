@@ -24,7 +24,8 @@ local M = {
 			explorerOpen = {
 				key = "<leader>e",
 				cmd = function()
-					pcall(function() require("sourcecontrol").close() end)
+					local sc = require("sourcecontrol")
+					if sc.is_open() then sc.close() end
 					local explorer = Snacks.picker.get({ source = "explorer" })
 						[1]
 					if explorer then
@@ -32,6 +33,7 @@ local M = {
 					else
 						Snacks.explorer.open()
 					end
+					vim.schedule(function() sc.apply_selector() end)
 				end,
 				mode = { "n", "v" },
 				desc = "Open/focus File Explorer"
@@ -39,8 +41,10 @@ local M = {
 			explorerToggle = {
 				key = "<leader>E",
 				cmd = function()
-					pcall(function() require("sourcecontrol").close() end)
+					local sc = require("sourcecontrol")
+					if sc.is_open() then sc.close() end
 					Snacks.explorer()
+					vim.schedule(function() sc.apply_selector() end)
 				end,
 				mode = { "n", "v" },
 				desc = "Toggle File Explorer"
@@ -362,6 +366,15 @@ vim.keymap.set("n", "<leader>q", function()
 end, { desc = "Close buffer and keep layout" })
 
 -- Source control
+vim.keymap.set("n", "<leader>g", function()
+	local sc = require("sourcecontrol")
+	if sc.is_open() then
+		sc.focus()
+	else
+		sc.open()
+	end
+end, { desc = "Open/focus Source Control" })
+
 vim.keymap.set("n", "<leader>G", function()
 	require("sourcecontrol").toggle()
 end, { desc = "Toggle Source Control" })

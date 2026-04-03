@@ -34,6 +34,9 @@ local symbols = require("symbols")
 
 vim.api.nvim_set_hl(0, "SCButton", { link = "PmenuSel" })
 vim.api.nvim_set_hl(0, "SCPlaceholder", { link = "Comment" })
+vim.api.nvim_set_hl(0, "SCSelectorActive", { link = "TabLineSel" })
+vim.api.nvim_set_hl(0, "SCSelectorInactive", { link = "TabLine" })
+vim.api.nvim_set_hl(0, "SCSelectorFill", { link = "TabLineFill" })
 
 local state = {
 	buf = nil,
@@ -76,7 +79,7 @@ end
 
 local function git_root()
 	local root = vim.fn.system("git rev-parse --show-toplevel 2>/dev/null"):gsub(
-	"\n", "")
+		"\n", "")
 	if vim.v.shell_error == 0 and root ~= "" then
 		return root
 	end
@@ -89,7 +92,7 @@ local function parse_status()
 	end
 
 	state.branch = vim.fn.system("git branch --show-current 2>/dev/null"):gsub(
-	"\n", "")
+		"\n", "")
 	if state.branch == "" then
 		state.branch = "detached"
 	end
@@ -229,7 +232,7 @@ function M.render()
 					local status_str = item.status
 					local prefix = "  " .. branch
 					local text = prefix ..
-					status_str .. " " .. icon .. " " .. item.file
+						status_str .. " " .. icon .. " " .. item.file
 
 					lnum = add(text, {
 						type = "file",
@@ -307,7 +310,7 @@ end
 
 local DIFF_LABELS = {
 	changes = "(Working Tree)",
-	staged = "(Index)",
+	staged = "(Staged)",
 	untracked = "(Untracked)",
 }
 
@@ -378,8 +381,8 @@ function M.show_diff(file, section)
 			elseif b_start >= #current_lines then
 				vim.api.nvim_buf_set_extmark(buf, DIFF_NS,
 					math.max(0, #current_lines - 1), 0, {
-					virt_lines = virt_lines,
-				})
+						virt_lines = virt_lines,
+					})
 			else
 				vim.api.nvim_buf_set_extmark(buf, DIFF_NS, b_start, 0, {
 					virt_lines = virt_lines,
@@ -478,11 +481,11 @@ local function create_input_buf()
 
 	local grp = vim.api.nvim_create_augroup("SCInput", { clear = true })
 	vim.api.nvim_create_autocmd(
-	{ "TextChanged", "TextChangedI", "InsertLeave", "BufEnter" }, {
-		group = grp,
-		buffer = state.input_buf,
-		callback = update_placeholder,
-	})
+		{ "TextChanged", "TextChangedI", "InsertLeave", "BufEnter" }, {
+			group = grp,
+			buffer = state.input_buf,
+			callback = update_placeholder,
+		})
 
 	update_placeholder()
 end
@@ -508,6 +511,94 @@ local function set_win_opts(win)
 	wo.spell = false
 	wo.list = false
 	wo.statuscolumn = ""
+end
+
+-- Sidebar selector -----------------------------------------------------------
+
+local function is_explorer_open()
+	local ok, pickers = pcall(function()
+		return Snacks.picker.get({
+			source =
+			"explorer"
+		})
+	end)
+	return ok and pickers and #pickers > 0
+end
+
+local function active_panel()
+	if M.is_open() then return "sc" end
+	if is_explorer_open() then return "explorer" end
+	return nil
+end
+
+local function selector_statusline()
+	local panel = active_panel()
+	local explorer_hl = panel == "explorer" and "%#SCSelectorActive#" or
+		"%#SCSelectorInactive#"
+	local sc_hl = panel == "sc" and "%#SCSelectorActive#" or
+		"%#SCSelectorInactive#"
+
+	return table.concat({
+		"%#SCSelectorFill#",
+		explorer_hl,
+		"%@v:lua.SCSelectExplorer@",
+		" " .. symbols.misc.folder .. "Explorer ",
+		"%X",
+		sc_hl,
+		"%@v:lua.SCSelectSourceControl@",
+		" " .. symbols.vcs.git .. "Source Control ",
+		"%X",
+		"%#SCSelectorFill#%=",
+	})
+end
+
+_G.SCSelectExplorer = function(_, _, btn)
+	if btn ~= "l" then return end
+	vim.schedule(function()
+		local sc = require("sourcecontrol")
+		if sc.is_open() then sc.close() end
+		local exp = Snacks.picker.get({ source = "explorer" })[1]
+		if exp then
+			exp:focus()
+		else
+			Snacks.explorer.open()
+		end
+		sc.apply_selector()
+	end)
+end
+
+_G.SCSelectSourceControl = function(_, _, btn)
+	if btn ~= "l" then return end
+	vim.schedule(function()
+		local sc = require("sourcecontrol")
+		if not sc.is_open() then
+			sc.open()
+		else
+			sc.focus()
+		end
+	end)
+end
+
+function M.apply_selector()
+	local stl = selector_statusline()
+
+	-- Apply to SC windows
+	if state.win and vim.api.nvim_win_is_valid(state.win) then
+		vim.wo[state.win].statusline = stl
+	end
+	if state.input_win and vim.api.nvim_win_is_valid(state.input_win) then
+		vim.wo[state.input_win].statusline = stl
+	end
+
+	-- Apply to explorer windows
+	for _, w in ipairs(vim.api.nvim_list_wins()) do
+		if vim.api.nvim_win_is_valid(w) then
+			local ft = vim.bo[vim.api.nvim_win_get_buf(w)].filetype
+			if ft == "snacks_layout_box" or ft == "snacks_picker_list" then
+				vim.wo[w].statusline = stl
+			end
+		end
+	end
 end
 
 local function get_explorer_width()
@@ -571,6 +662,13 @@ function M.open()
 	-- Focus list window
 	vim.api.nvim_set_current_win(state.win)
 	M.refresh()
+	M.apply_selector()
+end
+
+function M.focus()
+	if state.win and vim.api.nvim_win_is_valid(state.win) then
+		vim.api.nvim_set_current_win(state.win)
+	end
 end
 
 function M.close()
@@ -583,6 +681,8 @@ function M.close()
 		vim.api.nvim_win_close(state.win, true)
 	end
 	state.win = nil
+
+	vim.schedule(function() M.apply_selector() end)
 end
 
 function M.toggle()
@@ -633,6 +733,15 @@ function M.setup()
 			if state.input_win and closed == state.input_win then
 				state.input_win = nil
 			end
+		end,
+	})
+
+	-- Apply selector to explorer windows when they appear
+	vim.api.nvim_create_autocmd("FileType", {
+		group = grp,
+		pattern = { "snacks_layout_box", "snacks_picker_list" },
+		callback = function()
+			vim.schedule(function() M.apply_selector() end)
 		end,
 	})
 end

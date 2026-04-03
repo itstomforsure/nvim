@@ -174,6 +174,12 @@ function M.init(keybinds, symbols)
 								highlight = "Directory",
 								separator = true,
 							},
+							{
+								filetype = "sourcecontrol_input",
+								text = "Source Control",
+								highlight = "Directory",
+								separator = true,
+							},
 						},
 						color_icons = true,
 						show_buffer_icons = true,
