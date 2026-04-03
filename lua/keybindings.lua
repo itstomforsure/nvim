@@ -24,8 +24,9 @@ local M = {
 			explorerOpen = {
 				key = "<leader>e",
 				cmd = function()
+					pcall(function() require("sourcecontrol").close() end)
 					local explorer = Snacks.picker.get({ source = "explorer" })
-					[1]
+						[1]
 					if explorer then
 						explorer:focus()
 					else
@@ -35,59 +36,182 @@ local M = {
 				mode = { "n", "v" },
 				desc = "Open/focus File Explorer"
 			},
-			explorerToggle = { key = "<leader>E", cmd = function() Snacks
-					.explorer() end, mode = { "n", "v" }, desc = "Toggle File Explorer" },
+			explorerToggle = {
+				key = "<leader>E",
+				cmd = function()
+					pcall(function() require("sourcecontrol").close() end)
+					Snacks.explorer()
+				end,
+				mode = { "n", "v" },
+				desc = "Toggle File Explorer"
+			},
 
 			-- Terminal
 			terminalOpen = { key = "<leader>t", cmd = function() Snacks.terminal() end, desc = "Find Files" },
 
 			-- Find
-			find_files = { key = "<leader>ff", cmd = function() Snacks.picker
-					.files() end, desc = "Find Files" },
-			grep = { key = "<leader><space>", cmd = function() Snacks.picker
-					.grep() end, desc = "Grep" },
-			lsp_refs = { key = "<leader>fr", cmd = function() Snacks.picker
-					.lsp_references() end, nowait = true, desc = "LSP References" },
-			git_diff = { key = "<leader>fd", cmd = function() Snacks.picker
-					.git_diff() end, desc = "Git Diff (Hunks)" },
-			grep_word = { key = "<leader>fw", cmd = function() Snacks.picker
-					.grep_word() end, desc = "Visual selection or word", mode = { "n", "x" } },
+			find_files = {
+				key = "<leader>ff",
+				cmd = function()
+					Snacks.picker
+						.files()
+				end,
+				desc = "Find Files"
+			},
+			grep = {
+				key = "<leader><space>",
+				cmd = function()
+					Snacks.picker
+						.grep()
+				end,
+				desc = "Grep"
+			},
+			lsp_refs = {
+				key = "<leader>fr",
+				cmd = function()
+					Snacks.picker
+						.lsp_references()
+				end,
+				nowait = true,
+				desc = "LSP References"
+			},
+			git_diff = {
+				key = "<leader>fd",
+				cmd = function()
+					Snacks.picker
+						.git_diff()
+				end,
+				desc = "Git Diff (Hunks)"
+			},
+			grep_word = {
+				key = "<leader>fw",
+				cmd = function()
+					Snacks.picker
+						.grep_word()
+				end,
+				desc = "Visual selection or word",
+				mode = { "n", "x" }
+			},
 
 			-- Git
 			lazygit = { key = "<leader>gg", cmd = function() Snacks.lazygit() end, desc = "Lazygit" },
-			git_branches = { key = "<leader>gb", cmd = function() Snacks.picker
-					.git_branches() end, desc = "Git Branches" },
-			git_log = { key = "<leader>gl", cmd = function() Snacks.picker
-					.git_log() end, desc = "Git Log" },
-			git_log_line = { key = "<leader>gL", cmd = function() Snacks.picker
-					.git_log_line() end, desc = "Git Log Line" },
-			git_status = { key = "<leader>gs", cmd = function() Snacks.picker
-					.git_status() end, desc = "Git Status" },
-			git_stash = { key = "<leader>gS", cmd = function() Snacks.picker
-					.git_stash() end, desc = "Git Stash" },
-			git_log_file = { key = "<leader>gf", cmd = function() Snacks.picker
-					.git_log_file() end, desc = "Git Log File" },
+			git_branches = {
+				key = "<leader>gb",
+				cmd = function()
+					Snacks.picker
+						.git_branches()
+				end,
+				desc = "Git Branches"
+			},
+			git_log = {
+				key = "<leader>gl",
+				cmd = function()
+					Snacks.picker
+						.git_log()
+				end,
+				desc = "Git Log"
+			},
+			git_log_line = {
+				key = "<leader>gL",
+				cmd = function()
+					Snacks.picker
+						.git_log_line()
+				end,
+				desc = "Git Log Line"
+			},
+			git_status = {
+				key = "<leader>gs",
+				cmd = function()
+					Snacks.picker
+						.git_status()
+				end,
+				desc = "Git Status"
+			},
+			git_stash = {
+				key = "<leader>gS",
+				cmd = function()
+					Snacks.picker
+						.git_stash()
+				end,
+				desc = "Git Stash"
+			},
+			git_log_file = {
+				key = "<leader>gf",
+				cmd = function()
+					Snacks.picker
+						.git_log_file()
+				end,
+				desc = "Git Log File"
+			},
 
 			-- Search
-			registers = { key = "<leader>hr", cmd = function() Snacks.picker
-					.registers() end, desc = "Registers" },
-			search_history = { key = "<leader>hs", cmd = function() Snacks
-					.picker.search_history() end, desc = "Search History" },
+			registers = {
+				key = "<leader>hr",
+				cmd = function()
+					Snacks.picker
+						.registers()
+				end,
+				desc = "Registers"
+			},
+			search_history = {
+				key = "<leader>hs",
+				cmd = function()
+					Snacks
+						.picker.search_history()
+				end,
+				desc = "Search History"
+			},
 			undo = { key = "<leader>hu", cmd = function() Snacks.picker.undo() end, desc = "Undo History" },
-			autocmds = { key = "<leader>sa", cmd = function() Snacks.picker
-					.autocmds() end, desc = "Autocmds" },
-			commands = { key = "<leader>sC", cmd = function() Snacks.picker
-					.commands() end, desc = "Commands" },
-			diagnostics = { key = "<leader>sd", cmd = function() Snacks.picker
-					.diagnostics() end, desc = "Diagnostics" },
-			diagnostics_buffer = { key = "<leader>sD", cmd = function() Snacks
-					.picker.diagnostics_buffer() end, desc = "Buffer Diagnostics" },
-			highlights = { key = "<leader>sh", cmd = function() Snacks.picker
-					.highlights() end, desc = "Highlights" },
+			autocmds = {
+				key = "<leader>sa",
+				cmd = function()
+					Snacks.picker
+						.autocmds()
+				end,
+				desc = "Autocmds"
+			},
+			commands = {
+				key = "<leader>sC",
+				cmd = function()
+					Snacks.picker
+						.commands()
+				end,
+				desc = "Commands"
+			},
+			diagnostics = {
+				key = "<leader>sd",
+				cmd = function()
+					Snacks.picker
+						.diagnostics()
+				end,
+				desc = "Diagnostics"
+			},
+			diagnostics_buffer = {
+				key = "<leader>sD",
+				cmd = function()
+					Snacks
+						.picker.diagnostics_buffer()
+				end,
+				desc = "Buffer Diagnostics"
+			},
+			highlights = {
+				key = "<leader>sh",
+				cmd = function()
+					Snacks.picker
+						.highlights()
+				end,
+				desc = "Highlights"
+			},
 
 			-- Nice to haves
-			keymaps = { key = "<leader>sk", cmd = function() Snacks.picker
-					.keymaps() end, desc = "Keymaps" },
+			keymaps = {
+				key = "<leader>sk",
+				cmd = function()
+					Snacks.picker
+						.keymaps()
+				end,
+				desc = "Keymaps"
+			},
 			gitbrowse = { key = "<leader>gB", cmd = function() Snacks.gitbrowse() end, desc = "Git Browse", mode = { "n", "v" } },
 		},
 		toggles = {
@@ -236,6 +360,11 @@ _G.SmartCloseBuf = smart_close_buf
 vim.keymap.set("n", "<leader>q", function()
 	smart_close_buf()
 end, { desc = "Close buffer and keep layout" })
+
+-- Source control
+vim.keymap.set("n", "<leader>G", function()
+	require("sourcecontrol").toggle()
+end, { desc = "Toggle Source Control" })
 
 -- Show diagnostics
 vim.keymap.set("n", "T", vim.diagnostic.open_float)

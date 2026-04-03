@@ -8,6 +8,7 @@ local M = {}
 require("error_window").setup("<leader>b")
 require("cmdline").setup(";")
 require("search").setup("/")
+require("sourcecontrol").setup()
 -- require("bufferline").setup()
 -- require("terminal").setup({
 -- 	keybind = "<leader>t",
@@ -127,6 +128,11 @@ function M.init(keybinds, symbols)
 						style_preset = bufferline.style_preset.default,
 						themable = true,
 						numbers = "ordinal",
+						name_formatter = function(buf)
+							local label = vim.b[buf.bufnr] and vim.b[buf.bufnr].sc_diff_label
+							if label then return buf.name .. " " .. label end
+							return buf.name
+						end,
 						close_command = function(bufnr) _G.SmartCloseBuf(bufnr) end,
 						left_mouse_command = function(bufnr)
 							vim.api
@@ -159,6 +165,12 @@ function M.init(keybinds, symbols)
 							{
 								filetype = "snacks_layout_box",
 								text = "Explorer",
+								highlight = "Directory",
+								separator = true,
+							},
+							{
+								filetype = "sourcecontrol",
+								text = "Source Control",
 								highlight = "Directory",
 								separator = true,
 							},

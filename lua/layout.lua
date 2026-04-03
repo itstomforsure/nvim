@@ -33,6 +33,8 @@ M.config = {
 				"NvimTree",
 				"neo-tree",
 				"oil",
+				"sourcecontrol",
+				"sourcecontrol_input",
 			},
 		},
 		sidebar = {
