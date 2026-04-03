@@ -182,30 +182,50 @@ local function do_commit()
 	M.refresh()
 end
 
+local function run_git_in_terminal(cmd, on_done_msg)
+	-- Split below the SC list window, inside the explorer zone
+	if state.win and vim.api.nvim_win_is_valid(state.win) then
+		vim.api.nvim_set_current_win(state.win)
+	end
+
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.cmd("belowright 5split")
+	local win = vim.api.nvim_get_current_win()
+	vim.api.nvim_win_set_buf(win, buf)
+	vim.wo[win].winfixwidth = true
+	require("layout").tag_win(win, "explorer")
+
+	vim.fn.termopen(cmd, {
+		on_exit = function(_, code)
+			vim.schedule(function()
+				if code == 0 and on_done_msg then
+					vim.notify(on_done_msg, vim.log.levels.INFO)
+				end
+				M.refresh()
+				-- Auto-close terminal after a short delay on success
+				if code == 0 and vim.api.nvim_win_is_valid(win) then
+					vim.defer_fn(function()
+						if vim.api.nvim_win_is_valid(win) then
+							vim.api.nvim_win_close(win, true)
+						end
+					end, 1500)
+				end
+			end)
+		end,
+	})
+	vim.cmd("startinsert")
+end
+
 local function do_push()
 	if state.ahead_count == 0 then
 		vim.notify("Nothing to push", vim.log.levels.INFO)
 		return
 	end
-	vim.notify("Pushing to remote...", vim.log.levels.INFO)
-	local output = vim.fn.system("git push 2>&1")
-	if vim.v.shell_error ~= 0 then
-		vim.notify("Push failed: " .. vim.trim(output), vim.log.levels.ERROR)
-	else
-		vim.notify("Pushed " .. state.ahead_count .. " commit(s)", vim.log.levels.INFO)
-	end
-	M.refresh()
+	run_git_in_terminal("git push", "Pushed " .. state.ahead_count .. " commit(s)")
 end
 
 local function do_pull()
-	vim.notify("Pulling from remote...", vim.log.levels.INFO)
-	local output = vim.fn.system("git pull 2>&1")
-	if vim.v.shell_error ~= 0 then
-		vim.notify("Pull failed: " .. vim.trim(output), vim.log.levels.ERROR)
-	else
-		vim.notify(vim.trim(output), vim.log.levels.INFO)
-	end
-	M.refresh()
+	run_git_in_terminal("git pull", "Pulled from remote")
 end
 
 -- Input placeholder ----------------------------------------------------------
