@@ -18,6 +18,12 @@ local M = {
 			toggle = { key = "<leader>/", mode = { "n", "v" }, desc = "Toggle comment" },
 		},
 	},
+	terminal = {
+		binds = {
+			focus = {},
+			toggle = {}
+		}
+	},
 	snacks = {
 		binds = {
 			-- Explorer
@@ -51,7 +57,19 @@ local M = {
 			},
 
 			-- Terminal
-			terminalOpen = { key = "<leader>t", cmd = function() Snacks.terminal() end, desc = "Find Files" },
+			-- terminalOpen = { key = "<leader>t", cmd = function() Snacks.terminal() end, desc = "Find Files" },
+
+			-- Notifications
+			notifications = {
+				key = "<leader>n",
+				cmd = function()
+					Snacks.picker
+						.notifications()
+				end,
+				mode = { "n", "v" },
+				desc = "Notification History"
+			},
+
 
 			-- Find
 			find_files = {
@@ -227,6 +245,11 @@ local M = {
 			{ method = "indent",         key = "<leader>ug" },
 			{ method = "dim",            key = "<leader>uD" },
 			{ method = "treesitter",     key = "<leader>uT" },
+		},
+	},
+	minimap = {
+		binds = {
+			toggle = { key = "<leader>m", cmd = function() MiniMap.toggle() end, desc = "Toggle minimap" },
 		},
 	},
 	bufferline = {

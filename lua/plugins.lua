@@ -5,38 +5,37 @@
 local vim = vim
 local M = {}
 
-require("error_window").setup("<leader>b")
-require("cmdline").setup(";")
-require("search").setup("/")
-require("sourcecontrol").setup()
--- require("bufferline").setup()
--- require("terminal").setup({
--- 	keybind = "<leader>t",
--- 	new_keybind = "<leader>T",
--- 	prev_keybind =
--- 	"[t",
--- 	next_keybind = "]t"
--- })
--- local llm_provider = vim.env.LLM_CHAT_PROVIDER or "ollama"
--- require("llm_chat").setup({
--- 	keybind = "<leader>g",
--- 	new_keybind = "<leader>G",
--- 	prev_keybind = "[g",
--- 	next_keybind = "]g",
--- 	add_buffer_keybind = "<leader>ga",
--- 	add_buffers_keybind = "<leader>gA",
--- 	add_nvim_tree_keybind = "<leader>gt",
--- 	add_telescope_keybind = "<leader>gf",
--- 	model_selector_keybind = "<leader>gb",
--- 	provider = llm_provider,
--- })
--- require("llm_inline").setup({
--- 	ollama_host = vim.env.OLLAMA_HOST,
--- 	ollama_container = vim.env.OLLAMA_CONTAINER,
--- 	accept_key = "<Tab>",
--- })
-
 function M.init(keybinds, symbols)
+	require("cmdline").setup(";")
+	require("search").setup("/")
+	require("sourcecontrol").setup()
+	require("terminal").setup({
+		keybind = "<leader>t",
+		new_keybind = "<leader>T",
+		prev_keybind = "[t",
+		next_keybind = "]t"
+	})
+	-- require("error_window").setup("<leader>b")
+	-- require("bufferline").setup()
+	-- local llm_provider = vim.env.LLM_CHAT_PROVIDER or "ollama"
+	-- require("llm_chat").setup({
+	-- 	keybind = "<leader>g",
+	-- 	new_keybind = "<leader>G",
+	-- 	prev_keybind = "[g",
+	-- 	next_keybind = "]g",
+	-- 	add_buffer_keybind = "<leader>ga",
+	-- 	add_buffers_keybind = "<leader>gA",
+	-- 	add_nvim_tree_keybind = "<leader>gt",
+	-- 	add_telescope_keybind = "<leader>gf",
+	-- 	model_selector_keybind = "<leader>gb",
+	-- 	provider = llm_provider,
+	-- })
+	-- require("llm_inline").setup({
+	-- 	ollama_host = vim.env.OLLAMA_HOST,
+	-- 	ollama_container = vim.env.OLLAMA_CONTAINER,
+	-- 	accept_key = "<Tab>",
+	-- })
+
 	local lazy_path = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 	if not vim.loop.fs_stat(lazy_path) then
 		vim.fn.system({
@@ -61,7 +60,11 @@ function M.init(keybinds, symbols)
 				dashboard = { enabled = true },
 				explorer = { enabled = true },
 				indent = { enabled = true },
-				lazygit = { enabled = true },
+				input = { enabled = true },
+				notifier = {
+					enabled = true,
+					timeout = 3000,
+				},
 				picker = {
 					enabled = true,
 					sources = {
@@ -71,12 +74,17 @@ function M.init(keybinds, symbols)
 						},
 					},
 				},
-				statuscolumn = { enabled = true },
-				input = { enabled = true },
 				quickfile = { enabled = true },
 				scope = { enabled = true },
 				scroll = { enabled = true },
+				statuscolumn = { enabled = true },
 				words = { enabled = true },
+				lazygit = { enabled = true },
+				styles = {
+					notification = {
+						-- wo = { wrap = true } -- Wrap notifications
+					}
+				}
 			},
 			keys = function()
 				return keybinds.to_lazy_keys("snacks")
@@ -129,7 +137,8 @@ function M.init(keybinds, symbols)
 						themable = true,
 						numbers = "ordinal",
 						name_formatter = function(buf)
-							local label = vim.b[buf.bufnr] and vim.b[buf.bufnr].sc_diff_label
+							local label = vim.b[buf.bufnr] and
+								vim.b[buf.bufnr].sc_diff_label
 							if label then return buf.name .. " " .. label end
 							return buf.name
 						end,
@@ -191,6 +200,104 @@ function M.init(keybinds, symbols)
 				})
 			end,
 			keys = keybinds.to_lazy_keys("bufferline"),
+		},
+
+		-- Minimap
+		{
+			"echasnovski/mini.map",
+			version = "*",
+			lazy = false,
+			config = function()
+				local map = require("mini.map")
+
+				-- Custom integration: source control diff extmarks
+				local sc_diff_integration = function()
+					local ns_id = vim.api.nvim_create_namespace(
+						"sourcecontrol_diff")
+					local add_hl = "MiniMapSymbolDiffAdd"
+					local del_hl = "MiniMapSymbolDiffDelete"
+
+					vim.api.nvim_set_hl(0, add_hl, { fg = "#07ff00" })
+					vim.api.nvim_set_hl(0, del_hl, { fg = "#ff0000" })
+
+					return function()
+						local buf = vim.api.nvim_get_current_buf()
+						if not vim.b[buf].sc_diff_active then return {} end
+
+						local marks = vim.api.nvim_buf_get_extmarks(
+							buf, ns_id, 0, -1, { details = true })
+						local out = {}
+						for _, mark in ipairs(marks) do
+							local line = mark[2] + 1
+							local details = mark[4]
+							if details.line_hl_group == "DiffAdd" then
+								table.insert(out,
+									{ line = line, hl_group = add_hl })
+							elseif details.line_hl_group == "DiffDelete" then
+								table.insert(out,
+									{ line = line, hl_group = del_hl })
+							end
+							-- Virtual lines (deleted lines) - mark the anchor line
+							if details.virt_lines then
+								table.insert(out,
+									{ line = line, hl_group = del_hl })
+							end
+						end
+						return out
+					end
+				end
+
+				map.setup({
+					integrations = {
+						map.gen_integration.builtin_search(),
+						map.gen_integration.diagnostic({
+							error = "DiagnosticFloatingError",
+							warn = "DiagnosticFloatingWarn",
+							info = "DiagnosticFloatingInfo",
+							hint = "DiagnosticFloatingHint",
+						}),
+						map.gen_integration.diff(),
+						sc_diff_integration(),
+					},
+					symbols = {
+						encode = map.gen_encode_symbols.dot("4x2"),
+						scroll_line = "▶",
+						scroll_view = "┃",
+					},
+					window = {
+						focusable = false,
+						side = "right",
+						width = 10,
+						winblend = 25,
+						show_integration_count = false,
+					},
+				})
+
+				-- Auto-open only in editor buffers
+				local grp = vim.api.nvim_create_augroup("MiniMapAuto",
+					{ clear = true })
+				vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+					group = grp,
+					callback = function()
+						local buf = vim.api.nvim_get_current_buf()
+						local bt = vim.bo[buf].buftype
+						local ft = vim.bo[buf].filetype
+						local dominated = bt ~= "" or ft == "sourcecontrol"
+							or ft == "sourcecontrol_input"
+							or ft == "snacks_layout_box"
+							or ft == "snacks_picker_list"
+							or ft == "copilot-chat"
+							or ft == "snacks_terminal"
+							or ft == "minimap"
+						if dominated then
+							map.close()
+						else
+							map.open()
+						end
+					end,
+				})
+			end,
+			keys = keybinds.to_lazy_keys("minimap"),
 		},
 
 		-- Treesitter
@@ -399,7 +506,6 @@ function M.init(keybinds, symbols)
 			config = true,
 			keys = keybinds.to_lazy_keys("claude"),
 		},
-
 
 		-- Copilot
 		{

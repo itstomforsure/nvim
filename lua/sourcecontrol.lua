@@ -95,7 +95,8 @@ local function parse_status()
 		sec.items = {}
 	end
 
-	state.branch = vim.fn.system("git branch --show-current 2>/dev/null"):gsub("\n", "")
+	state.branch = vim.fn.system("git branch --show-current 2>/dev/null"):gsub(
+	"\n", "")
 	if state.branch == "" then
 		state.branch = "detached"
 	end
@@ -114,7 +115,8 @@ local function parse_status()
 			for _, entry in ipairs(log) do
 				local hash, subject = entry:match("^(%S+)|(.*)$")
 				if hash then
-					table.insert(state.commits, { hash = hash, subject = subject })
+					table.insert(state.commits,
+						{ hash = hash, subject = subject })
 				end
 			end
 		end
@@ -133,13 +135,16 @@ local function parse_status()
 			local display = path:match("-> (.+)$") or path
 
 			if x == "?" then
-				table.insert(get_section("untracked").items, { status = "?", file = display })
+				table.insert(get_section("untracked").items,
+					{ status = "?", file = display })
 			else
 				if x ~= " " then
-					table.insert(get_section("staged").items, { status = x, file = display })
+					table.insert(get_section("staged").items,
+						{ status = x, file = display })
 				end
 				if y ~= " " then
-					table.insert(get_section("changes").items, { status = y, file = display })
+					table.insert(get_section("changes").items,
+						{ status = y, file = display })
 				end
 			end
 		end
@@ -221,7 +226,8 @@ local function do_push()
 		vim.notify("Nothing to push", vim.log.levels.INFO)
 		return
 	end
-	run_git_in_terminal("git push", "Pushed " .. state.ahead_count .. " commit(s)")
+	run_git_in_terminal("git push",
+		"Pushed " .. state.ahead_count .. " commit(s)")
 end
 
 local function do_pull()
@@ -293,13 +299,15 @@ function M.render()
 	-- Sections
 	for _, sec in ipairs(state.sections) do
 		local chevron = sec.collapsed and " " or " "
-		local header = string.format(" %s %s (%d)", chevron, sec.label, #sec.items)
+		local header = string.format(" %s %s (%d)", chevron, sec.label,
+			#sec.items)
 		lnum = add(header, { type = "section", key = sec.key })
 		hl_line(lnum, "Directory")
 
 		if not sec.collapsed then
 			if #sec.items == 0 then
-				local empty_label = sec.key == "commits" and "No unpushed commits" or ("No " .. sec.label:lower())
+				local empty_label = sec.key == "commits" and
+				"No unpushed commits" or ("No " .. sec.label:lower())
 				lnum = add("  └── " .. empty_label)
 				hl_range(lnum, 0, #("  └── "), "NonText")
 				hl_range(lnum, #("  └── "), -1, "Comment")
@@ -332,7 +340,8 @@ function M.render()
 					local icon, icon_hl = file_icon(item.file)
 					local status_str = item.status
 					local prefix = "  " .. connector
-					local text = prefix .. status_str .. " " .. icon .. " " .. item.file
+					local text = prefix ..
+					status_str .. " " .. icon .. " " .. item.file
 
 					lnum = add(text, {
 						type = "file",
@@ -348,7 +357,8 @@ function M.render()
 					-- Highlight status letter
 					local s_start = #prefix
 					local s_end = s_start + #status_str
-					hl_range(lnum, s_start, s_end, STATUS_HL[item.status] or "Normal")
+					hl_range(lnum, s_start, s_end,
+						STATUS_HL[item.status] or "Normal")
 
 					-- Highlight file icon
 					local i_start = s_end + 1
@@ -493,7 +503,13 @@ function M.show_diff(file, section)
 
 	vim.b[buf].sc_diff_active = true
 	vim.b[buf].sc_diff_label = DIFF_LABELS[section]
+	M._refresh_minimap()
 	M._setup_diff_autoclear(buf)
+end
+
+function M._refresh_minimap()
+	local ok, minimap = pcall(require, "mini.map")
+	if ok then pcall(minimap.refresh, {}, { lines = false, scrollbar = false }) end
 end
 
 function M._setup_diff_autoclear(bufnr)
@@ -507,6 +523,7 @@ function M._setup_diff_autoclear(bufnr)
 			vim.api.nvim_buf_clear_namespace(bufnr, DIFF_NS, 0, -1)
 			vim.b[bufnr].sc_diff_active = nil
 			vim.b[bufnr].sc_diff_label = nil
+			M._refresh_minimap()
 		end,
 	})
 end
