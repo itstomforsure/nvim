@@ -80,11 +80,6 @@ function M.init(keybinds, symbols)
 				statuscolumn = { enabled = true },
 				words = { enabled = true },
 				lazygit = { enabled = true },
-				styles = {
-					notification = {
-						-- wo = { wrap = true } -- Wrap notifications
-					}
-				}
 			},
 			keys = function()
 				return keybinds.to_lazy_keys("snacks")
@@ -268,34 +263,14 @@ function M.init(keybinds, symbols)
 						focusable = false,
 						side = "right",
 						width = 10,
-						winblend = 25,
+						winblend = 10,
 						show_integration_count = false,
 					},
 				})
 
-				-- Auto-open only in editor buffers
-				local grp = vim.api.nvim_create_augroup("MiniMapAuto",
-					{ clear = true })
-				vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
-					group = grp,
-					callback = function()
-						local buf = vim.api.nvim_get_current_buf()
-						local bt = vim.bo[buf].buftype
-						local ft = vim.bo[buf].filetype
-						local dominated = bt ~= "" or ft == "sourcecontrol"
-							or ft == "sourcecontrol_input"
-							or ft == "snacks_layout_box"
-							or ft == "snacks_picker_list"
-							or ft == "copilot-chat"
-							or ft == "snacks_terminal"
-							or ft == "minimap"
-						if dominated then
-							map.close()
-						else
-							map.open()
-						end
-					end,
-				})
+				-- Auto behavior (reposition, open/close) is now handled by
+				-- editorgroup/minimap.lua.  mini.map stays available for
+				-- manual use via :lua MiniMap.open() if needed.
 			end,
 			keys = keybinds.to_lazy_keys("minimap"),
 		},
@@ -544,6 +519,12 @@ function M.init(keybinds, symbols)
 			end,
 			keys = keybinds.to_lazy_keys("copilot_chat"),
 		},
+	})
+
+	-- Editor groups (must run after lazy.setup so keybind overrides take effect)
+	require("editorgroup").setup({
+		vsplit_key = "<leader>\\",
+		close_group_key = "<leader>Q",
 	})
 end
 

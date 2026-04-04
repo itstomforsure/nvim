@@ -28,19 +28,4 @@ for key, value in pairs(settings) do
 	vim.opt[key] = value
 end
 
-vim.opt.autoread = true
-vim.api.nvim_create_autocmd(
-	{ "FocusGained", "BufEnter", "CursorHold", "CursorHoldI" }, {
-		command = "checktime",
-	})
-
-vim.g.mapleader = " "
-vim.g.netrw_winsize = 25
-vim.lsp.inlay_hint.enable()
-vim.diagnostic.config({
-	update_in_insert = true,
-	virtual_text = true,
-})
-vim.cmd(":colorscheme vscode")
-
-require("framework")
+require("framework").init()

@@ -1,6 +1,6 @@
 local vim = vim
 
-local lsp_utils = require("lsp/utils")
+local lsp_utils = require("lsp.utils")
 
 local fileTypes = { "lua" }
 
@@ -60,7 +60,7 @@ local config = {
 				paramName = "All",
 				paramType = true,
 				arrayIndex = "Enable",
-				setType = false,
+				setType = true,
 			},
 			format = {
 				enable = true,
@@ -68,7 +68,7 @@ local config = {
 					indent_style = "space",
 					indent_size = "4",
 					continuation_indent = "4",
-					max_line_length = "80",
+					max_line_length = "120",
 				},
 			},
 			misc = {

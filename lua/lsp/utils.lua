@@ -2,6 +2,14 @@ local vim = vim
 
 local M = {}
 
+function M.init(keybinds)
+	M.keybinds = keybinds
+	vim.diagnostic.config({
+		update_in_insert = true,
+		virtual_text = true,
+	})
+end
+
 function M.lsp_exists(server)
 	local handle = io.popen("which " .. server .. " 2>/dev/null")
 	if handle then
@@ -15,7 +23,7 @@ end
 function M.find_project_root()
 	local current_dir = vim.fn.expand("%:p:h")
 	local root_markers = { "angular.json", "package.json", "project.json", ".git",
-		".editorconfig" }
+		".editorconfig", "lazy-lock.json", "README.md" }
 
 	local function find_root(path)
 		for _, marker in ipairs(root_markers) do
@@ -38,12 +46,12 @@ function M.detect_project_configs(root_dir)
 	local configs = {
 		editorconfig = vim.fn.filereadable(root_dir .. "/.editorconfig") == 1,
 		eslint = vim.fn.filereadable(root_dir .. "/.eslintrc.json") == 1 or
-		vim.fn.filereadable(
-			root_dir .. "/.eslintrc.js"
-		) == 1 or vim.fn.filereadable(root_dir .. "/.eslintrc.yaml") == 1 or
-		vim.fn.filereadable(
-			root_dir .. "/.eslintrc.yml"
-		) == 1 or vim.fn.filereadable(root_dir .. "/eslint.config.js") == 1,
+			vim.fn.filereadable(
+				root_dir .. "/.eslintrc.js"
+			) == 1 or vim.fn.filereadable(root_dir .. "/.eslintrc.yaml") == 1 or
+			vim.fn.filereadable(
+				root_dir .. "/.eslintrc.yml"
+			) == 1 or vim.fn.filereadable(root_dir .. "/eslint.config.js") == 1,
 		prettier = vim.fn.filereadable(root_dir .. "/.prettierrc") == 1
 			or vim.fn.filereadable(root_dir .. "/.prettierrc.json") == 1
 			or vim.fn.filereadable(root_dir .. "/.prettierrc.js") == 1
@@ -61,23 +69,13 @@ function M.on_attach(client, bufnr)
 
 	local opts = { silent = true, buffer = bufnr }
 
-	vim.keymap.set("n", "gd", vim.lsp.buf.definition, opts)
-	vim.keymap.set("n", "gD", vim.lsp.buf.declaration, opts)
-	vim.keymap.set("n", "gi", vim.lsp.buf.implementation, opts)
-	vim.keymap.set("n", "gr", vim.lsp.buf.references, opts)
-	vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)
-	vim.keymap.set("n", "<C-k>", vim.lsp.buf.signature_help, opts)
-
-	vim.keymap.set("n", "<leader>rn", vim.lsp.buf.rename, opts)
-	vim.keymap.set({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, opts)
-
-	vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, opts)
-	vim.keymap.set("n", "]d", vim.diagnostic.goto_next, opts)
-	vim.keymap.set("n", "<leader>r", vim.diagnostic.open_float, opts)
-	vim.keymap.set("n", "<leader>R", vim.diagnostic.setloclist, opts)
+	for _, value in pairs(M.keybinds.lsp.binds) do
+		vim.keymap.set(value.mode, value.key, value.cmd, opts)
+	end
 
 	if client.server_capabilities.inlayHintProvider then
-		vim.keymap.set("n", "<leader>uh", function()
+		local inlay_hint_bind = M.keybinds.lsp.inlay_hint
+		vim.keymap.set(inlay_hint_bind.mode, inlay_hint_bind.key, function()
 			vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled())
 			vim.notify(string.format("Inlay hints: %s",
 				vim.lsp.inlay_hint.is_enabled() and "on" or "off"))

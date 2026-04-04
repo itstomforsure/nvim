@@ -1,6 +1,6 @@
 local vim = vim
 
-local lsp_utils = require("lsp/utils")
+local lsp_utils = require("lsp.utils")
 
 local fileTypes = { "go", "gomod", "gowork", "gotmpl" }
 

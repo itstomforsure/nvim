@@ -24,6 +24,59 @@ local M = {
 			toggle = {}
 		}
 	},
+	lsp = {
+		inlay_hint = {
+			key = "<leader>uh",
+			mode = { "n" }
+		},
+		binds = {
+			-- definition = {
+			-- 	key = "gd",
+			-- 	cmd = vim.lsp.buf.definition,
+			-- 	mode = { "n" }
+			-- },
+			-- declaration = {
+			-- 	key = "gD",
+			-- 	cmd = vim.lsp.buf.declaration,
+			-- 	mode = { "n" }
+			-- },
+			-- implementation = {
+			-- 	key = "gi",
+			-- 	cmd = vim.lsp.buf.implementation,
+			-- 	mode = { "n" }
+			-- },
+			-- references = {
+			-- 	key = "gr",
+			-- 	cmd = vim.lsp.buf.references,
+			-- 	mode = { "n" }
+			-- },
+			hover = {
+				key = "K",
+				cmd = vim.lsp.buf.hover,
+				mode = { "n" }
+			},
+			signature_help = {
+				key = "<C-k>",
+				cmd = vim.lsp.buf.signature_help,
+				mode = { "n" }
+			},
+			code_action = {
+				key = "<C-.>",
+				cmd = vim.lsp.buf.code_action,
+				mode = { "n" }
+			},
+			goto_prev = {
+				key = "[d",
+				cmd = vim.diagnostic.goto_prev,
+				mode = { "n" }
+			},
+			goto_next = {
+				key = "]d",
+				cmd = vim.diagnostic.goto_next,
+				mode = { "n" }
+			},
+		}
+	},
 	snacks = {
 		binds = {
 			-- Explorer
@@ -54,12 +107,7 @@ local M = {
 				end,
 				mode = { "n", "v" },
 				desc = "Toggle File Explorer"
-			},
-
-			-- Terminal
-			-- terminalOpen = { key = "<leader>t", cmd = function() Snacks.terminal() end, desc = "Find Files" },
-
-			-- Notifications
+			}, -- Notifications
 			notifications = {
 				key = "<leader>n",
 				cmd = function()
@@ -69,7 +117,6 @@ local M = {
 				mode = { "n", "v" },
 				desc = "Notification History"
 			},
-
 
 			-- Find
 			find_files = {
@@ -88,14 +135,29 @@ local M = {
 				end,
 				desc = "Grep"
 			},
+			lsp_defs = {
+				key = "gd",
+				cmd = function() Snacks.picker.lsp_definitions() end,
+				desc = "Goto Definition"
+			},
+			lsp_decs = {
+				key = "gD",
+				cmd = function() Snacks.picker.lsp_declarations() end,
+				desc = "Goto Declaration"
+			},
 			lsp_refs = {
-				key = "<leader>fr",
+				key = "gr",
 				cmd = function()
 					Snacks.picker
 						.lsp_references()
 				end,
 				nowait = true,
 				desc = "LSP References"
+			},
+			lsp_impls = {
+				key = "gi",
+				cmd = function() Snacks.picker.lsp_implementations() end,
+				desc = "Goto Implementation"
 			},
 			git_diff = {
 				key = "<leader>fd",
