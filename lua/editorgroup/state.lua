@@ -139,4 +139,50 @@ function M.reset()
 	M.multi_mode = false
 end
 
+--- Serialize group state into a plain table (file paths instead of buffer IDs).
+--- Used by session.lua for branch-based session persistence.
+function M.serialize()
+	M.cleanup_windows()
+	M.cleanup_buffers()
+
+	local data = {
+		groups = {},
+		multi_mode = M.multi_mode,
+	}
+
+	for _, g in ipairs(M.groups) do
+		local group_data = {
+			buffers = {},
+			active_buf = nil,
+			width = nil,
+		}
+
+		for _, b in ipairs(g.buffers) do
+			if vim.api.nvim_buf_is_valid(b) then
+				local name = vim.api.nvim_buf_get_name(b)
+				if name ~= "" then
+					table.insert(group_data.buffers, name)
+					if b == g.active_buf then
+						group_data.active_buf = name
+					end
+				end
+			end
+		end
+
+		-- Save first window's width for proportional restore
+		for _, w in ipairs(g.windows) do
+			if vim.api.nvim_win_is_valid(w) then
+				group_data.width = vim.api.nvim_win_get_width(w)
+				break
+			end
+		end
+
+		if #group_data.buffers > 0 then
+			table.insert(data.groups, group_data)
+		end
+	end
+
+	return data
+end
+
 return M

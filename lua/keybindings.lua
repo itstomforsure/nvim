@@ -1,7 +1,10 @@
 local vim = vim
 
 -- General keybindings
-vim.keymap.set("n", "<C-q>", ":qa!<CR>")
+vim.keymap.set("n", "<C-q>", function()
+	pcall(function() require("session").save() end)
+	vim.cmd("qa!")
+end)
 
 -- Save on Ctrl+s in normal and insert and visual modes
 vim.keymap.set("n", "<C-s>", ":wa<CR>")
@@ -52,12 +55,24 @@ local M = {
 			-- },
 			hover = {
 				key = "K",
-				cmd = vim.lsp.buf.hover,
+				cmd = function()
+					vim.lsp.buf.hover({
+						border = "rounded",
+						max_width = 80,
+						max_height = 20,
+					})
+				end,
 				mode = { "n" }
 			},
 			signature_help = {
 				key = "<C-k>",
-				cmd = vim.lsp.buf.signature_help,
+				cmd = function()
+					vim.lsp.buf.signature_help({
+						border = "rounded",
+						max_width = 80,
+						max_height = 20,
+					})
+				end,
 				mode = { "n" }
 			},
 			code_action = {
@@ -367,24 +382,19 @@ local M = {
 	},
 }
 
---- Convert a plugin's .binds table to lazy.nvim keys format
-function M.to_lazy_keys(plugin_name)
+--- Apply a plugin's .binds table directly via vim.keymap.set.
+function M.apply(plugin_name)
 	local plugin = M[plugin_name]
-	if not plugin or not plugin.binds then return {} end
-	local result = {}
+	if not plugin or not plugin.binds then return end
 	for _, bind in pairs(plugin.binds) do
-		table.insert(result, {
-			bind.key,
-			bind.cmd,
-			mode = bind.mode,
+		vim.keymap.set(bind.mode or "n", bind.key, bind.cmd, {
 			desc = bind.desc,
 			nowait = bind.nowait,
-			ft = bind.ft,
 			expr = bind.expr,
 			replace_keycodes = bind.replace_keycodes,
+			silent = true,
 		})
 	end
-	return result
 end
 
 -- Smart buffer close: navigate away cleanly, fall back to dashboard
