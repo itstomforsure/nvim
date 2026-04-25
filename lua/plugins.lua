@@ -1,452 +1,530 @@
+-------------------------------------------------------------------------------
+-- Plugins
+-------------------------------------------------------------------------------
+-- Uses Neovim 0.12's built-in vim.pack as the package manager.
+-- Specs are listed once in a flat table; each spec carries its own config()
+-- callback that runs after vim.pack has put the plugin on the runtimepath.
+-- Plugin keymaps are owned by lua/keybindings.lua and applied via
+-- keybinds.apply(<plugin_name>) inside each config().
+-------------------------------------------------------------------------------
+
 local vim = vim
+local M = {}
 
-vim.notify = require("notify").notify
-require("bufferline").setup()
-require("error_window").setup("<leader>b")
-require("cmdline").setup(";")
-require("search").setup("/")
-require("terminal").setup({
-	keybind = "<leader>t",
-	new_keybind = "<leader>T",
-	prev_keybind =
-	"[t",
-	next_keybind = "]t"
-})
--- local llm_provider = vim.env.LLM_CHAT_PROVIDER or "ollama"
--- require("llm_chat").setup({
--- 	keybind = "<leader>g",
--- 	new_keybind = "<leader>G",
--- 	prev_keybind = "[g",
--- 	next_keybind = "]g",
--- 	add_buffer_keybind = "<leader>ga",
--- 	add_buffers_keybind = "<leader>gA",
--- 	add_nvim_tree_keybind = "<leader>gt",
--- 	add_telescope_keybind = "<leader>gf",
--- 	model_selector_keybind = "<leader>gb",
--- 	provider = llm_provider,
--- })
--- require("llm_inline").setup({
--- 	ollama_host = vim.env.OLLAMA_HOST,
--- 	ollama_container = vim.env.OLLAMA_CONTAINER,
--- 	accept_key = "<Tab>",
--- })
+local function pack(plugins)
+	local specs = {}
+	for _, p in ipairs(plugins) do
+		table.insert(specs, { src = p.src, version = p.version, name = p.name })
+	end
+	vim.pack.add(specs)
 
-local symbols = require("symbols")
-
-local lazy_path = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
-if not vim.loop.fs_stat(lazy_path) then
-	vim.fn.system({
-		"git",
-		"clone",
-		"--filter=blob:none",
-		"https://github.com/folke/lazy.nvim.git",
-		"--branch=stable",
-		lazy_path,
-	})
-end
-vim.opt.rtp:prepend(lazy_path)
-
-require("lazy").setup({
-	-- Snacks
-	{
-		"folke/snacks.nvim",
-		priority = 1000,
-		lazy = false,
-		opts = {
-			bigfile = { enabled = true },
-			dashboard = { enabled = true },
-			explorer = { enabled = true },
-			indent = { enabled = true },
-			lazygit = { enabled = true },
-			picker = {
-				enabled = true,
-				sources = {
-					explorer = {
-						hidden = true,
-						ignored = true,
-					},
-				},
-			},
-			statuscolumn = { enabled = true },
-			input = { enabled = true },
-			quickfile = { enabled = true },
-			scope = { enabled = true },
-			scroll = { enabled = true },
-			words = { enabled = true },
-		},
-		keys = {
-			{
-				"<leader>e",
-				function()
-					local explorer = Snacks.picker.get({ source = "explorer" })
-						[1]
-					if explorer then
-						explorer:focus()
-					else
-						Snacks.explorer.open()
-					end
-				end,
-				desc = "Focus/Open File Explorer"
-			},
-			{
-				"<leader>E",
-				function() Snacks.explorer() end,
-				desc = "Toggle File Explorer"
-			},
-			{ "<leader>ff",      function() Snacks.picker.files() end,              desc = "Find Files" },
-			{ "<leader><space>", function() Snacks.picker.grep() end,               desc = "Grep" },
-			{ "<leader>fr",      function() Snacks.picker.lsp_references() end,     nowait = true,                     desc = "LSP References" },
-			{ "<leader>fd",      function() Snacks.picker.git_diff() end,           desc = "Git Diff (Hunks)" },
-			{ "<leader>fw",      function() Snacks.picker.grep_word() end,          desc = "Visual selection or word", mode = { "n", "x" } },
-
-			-- Git
-			{ "<leader>gg",      function() Snacks.lazygit() end,                   desc = "Lazygit" },
-			{ "<leader>gb",      function() Snacks.picker.git_branches() end,       desc = "Git Branches" },
-			{ "<leader>gl",      function() Snacks.picker.git_log() end,            desc = "Git Log" },
-			{ "<leader>gL",      function() Snacks.picker.git_log_line() end,       desc = "Git Log Line" },
-			{ "<leader>gs",      function() Snacks.picker.git_status() end,         desc = "Git Status" },
-			{ "<leader>gS",      function() Snacks.picker.git_stash() end,          desc = "Git Stash" },
-			{ "<leader>gd",      function() Snacks.picker.git_diff() end,           desc = "Git Diff (Hunks)" },
-			{ "<leader>gf",      function() Snacks.picker.git_log_file() end,       desc = "Git Log File" },
-
-			-- search
-			{ '<leader>hr',      function() Snacks.picker.registers() end,          desc = "Registers" },
-			{ '<leader>hs',      function() Snacks.picker.search_history() end,     desc = "Search History" },
-			{ "<leader>hu",      function() Snacks.picker.undo() end,               desc = "Undo History" },
-			{ "<leader>sa",      function() Snacks.picker.autocmds() end,           desc = "Autocmds" },
-			{ "<leader>sC",      function() Snacks.picker.commands() end,           desc = "Commands" },
-			{ "<leader>sd",      function() Snacks.picker.diagnostics() end,        desc = "Diagnostics" },
-			{ "<leader>sD",      function() Snacks.picker.diagnostics_buffer() end, desc = "Buffer Diagnostics" },
-			{ "<leader>sh",      function() Snacks.picker.highlights() end,         desc = "Highlights" },
-
-			-- Nice to haves
-			{ "<leader>sk",      function() Snacks.picker.keymaps() end,            desc = "Keymaps" },
-			{ "<leader>gB",      function() Snacks.gitbrowse() end,                 desc = "Git Browse",               mode = { "n", "v" } },
-		},
-		init = function()
-			vim.api.nvim_create_autocmd("User", {
-				pattern = "VeryLazy",
-				callback = function()
-					-- Setup some globals for debugging (lazy-loaded)
-					_G.dd = function(...)
-						Snacks.debug.inspect(...)
-					end
-					_G.bt = function()
-						Snacks.debug.backtrace()
-					end
-
-					-- Override print to use snacks for `:=` command
-					if vim.fn.has("nvim-0.11") == 1 then
-						vim._print = function(_, ...)
-							dd(...)
-						end
-					else
-						vim.print = _G.dd
-					end
-
-					-- Create some toggle mappings
-					Snacks.toggle.option("spell", { name = "Spelling" }):map(
-						"<leader>us")
-					Snacks.toggle.option("wrap", { name = "Wrap" }):map(
-						"<leader>uw")
-					Snacks.toggle.option("relativenumber",
-						{ name = "Relative Number" }):map("<leader>uL")
-					Snacks.toggle.diagnostics():map("<leader>ud")
-					Snacks.toggle.line_number():map("<leader>ul")
-					Snacks.toggle.indent():map("<leader>ug")
-					Snacks.toggle.dim():map("<leader>uD")
-					Snacks.toggle.treesitter():map("<leader>uT")
-				end,
-			})
-		end,
-	},
-
-	-- Treesitter
-	{
-		"nvim-treesitter/nvim-treesitter",
-		branch = "master",
-		lazy = false,
-		build = ":TSUpdate",
-		config = function()
-			require("nvim-treesitter.configs").setup({
-				ensure_installed = {
-					"lua",
-					"typescript",
-					"javascript",
-					"html",
-					"css",
-					"go",
-					"gomod",
-					"gosum",
-					"gowork",
-					"json",
-					"bash",
-					"vim",
-					"markdown",
-					"markdown_inline",
-					"regex",
-					"yaml",
-					"toml",
-					"query",
-					"gitignore",
-				},
-				auto_install = true,
-				highlight = {
-					enable = true,
-					additional_vim_regex_highlighting = false,
-				},
-				indent = { enable = true },
-				incremental_selection = {
-					enable = true,
-				},
-				rainbow = {
-					enable = true,
-					extended_mode = true,
-					max_file_lines = nil,
-				},
-			})
-		end,
-	},
-
-	-- Comment
-	{
-		"numToStr/Comment.nvim",
-		opts = {
-			toggler = {
-				line = "<leader>/",
-			},
-			opleader = {
-				line = "<leader>/",
-			},
-		},
-		keys = {
-			{ "<leader>/", mode = { "n", "v" } },
-		},
-	},
-
-	-- Linting
-	{
-		"mfussenegger/nvim-lint",
-		config = function()
-			local lint = require("lint")
-			lint.linters_by_ft = {
-				lua = { "luacheck" },
-				go = { "golangci-lint" },
-				javascript = { "eslint_d" },
-				javascriptreact = { "eslint_d" },
-				typescript = { "eslint_d" },
-				typescriptreact = { "eslint_d" },
-			}
-
-			vim.api.nvim_create_autocmd(
-				{ "BufWritePost", "InsertLeave", "TextChanged", "TextChangedI" },
-				{
-					callback = function()
-						require("lint").try_lint()
-					end,
-				})
-		end,
-	},
-
-	-- Formatting
-	{
-		"stevearc/conform.nvim",
-		opts = {
-			formatters_by_ft = {
-				lua = { "stylua" },
-				go = { "gofumpt", "goimports" },
-				javascript = { "prettierd", "prettier" },
-				javascriptreact = { "prettierd", "prettier" },
-				typescript = { "prettierd", "prettier" },
-				typescriptreact = { "prettierd", "prettier" },
-				html = { "prettierd", "prettier" },
-				css = { "prettierd", "prettier" },
-				scss = { "prettierd", "prettier" },
-				json = { "prettierd", "prettier" },
-				yaml = { "prettierd", "prettier" },
-				markdown = { "prettierd", "prettier" },
-			},
-			format_on_save = {
-				lsp_fallback = true,
-				timeout_ms = 500,
-			},
-		},
-	},
-
-	-- Bottom status bar
-	{
-		"nvim-lualine/lualine.nvim",
-		dependencies = { "nvim-tree/nvim-web-devicons" },
-		config = function()
-			local function line_info()
-				local line = vim.fn.line(".")
-				local col = vim.fn.col(".")
-				local total_lines = vim.fn.line("$")
-				return string.format("%d:%d / %d", line, col, total_lines)
+	for _, p in ipairs(plugins) do
+		if p.config then
+			local ok, err = pcall(p.config)
+			if not ok then
+				vim.notify(("plugin '%s' config failed: %s"):format(p.src, err),
+					vim.log.levels.ERROR)
 			end
-			require("lualine").setup({
-				options = {
-					theme = "nord",
-					section_separators = { left = "", right = "" },
-					component_separators = { left = "", right = "" },
-					globalstatus = true,
-				},
-				sections = {
-					lualine_b = { "branch" },
-					lualine_c = { "filename" },
-					lualine_x = {
-						{
-							"diagnostics",
-							sources = { "nvim_diagnostic" },
-							symbols = {
-								error = symbols.ui.error,
-								warn = symbols.ui.warn,
-								info = symbols.ui.info,
-								hint = symbols.ui.hint,
+		end
+	end
+end
+
+-- When vim.pack installs or updates nvim-treesitter, run :TSUpdate so parsers
+-- stay in sync with the new runtime.
+vim.api.nvim_create_autocmd("PackChanged", {
+	callback = function(ev)
+		local data = ev.data or {}
+		local spec = data.spec or {}
+		if spec.name ~= "nvim-treesitter" then return end
+		if data.kind ~= "install" and data.kind ~= "update" then return end
+		vim.schedule(function() pcall(vim.cmd, "TSUpdate") end)
+	end,
+})
+
+function M.init(keybinds, symbols)
+	-- Internal modules that have always been treated as first-class plugins.
+	require("cmdline").setup(";")
+	require("search").setup("/")
+	require("sourcecontrol").setup()
+	require("terminal").setup({
+		keybind = "<leader>t",
+		new_keybind = "<leader>T",
+		prev_keybind = "[t",
+		next_keybind = "]t"
+	})
+
+	pack({
+		--------------------------------------------------------------------
+		-- Snacks (priority everything: notifier, picker, explorer, etc.)
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/folke/snacks.nvim",
+			config = function()
+				require("snacks").setup({
+					bigfile = { enabled = true },
+					dashboard = {
+						enabled = true,
+						-- Default `startup` section requires lazy.stats; omitted
+						-- since we use vim.pack.
+						sections = {
+							{ section = "header" },
+							{ section = "keys", gap = 1, padding = 1 },
+							{ pane = 2, icon = " ", title = "Recent Files", section = "recent_files", indent = 2, padding = 1 },
+							{ pane = 2, icon = " ", title = "Projects", section = "projects", indent = 2, padding = 1 },
+						},
+					},
+					explorer = { enabled = true },
+					indent = { enabled = true },
+					input = { enabled = true },
+					notifier = {
+						enabled = true,
+						timeout = 3000,
+					},
+					picker = {
+						enabled = true,
+						sources = {
+							explorer = {
+								hidden = true,
+								ignored = true,
 							},
 						},
-						{
-							function()
-								local buf_clients = vim.lsp.get_clients({ bufnr = 0 })
-								local parts = {}
-
-								if #buf_clients > 0 then
-									local lsps = {}
-									for _, client in pairs(buf_clients) do
-										table.insert(lsps, client.name)
-									end
-									table.insert(parts,
-										symbols.dev.lsp ..
-										" " .. table.concat(lsps, ", "))
-								end
-
-								local linters = require("lint").linters_by_ft
-									[vim.bo.filetype] or {}
-								if #linters > 0 then
-									table.insert(parts,
-										symbols.dev.linter ..
-										" " .. table.concat(linters, ", "))
-								end
-
-								local formatters = require("conform")
-									.list_formatters(0)
-								if #formatters > 0 then
-									local names = {}
-									for _, f in ipairs(formatters) do
-										table.insert(names, f.name)
-									end
-									table.insert(parts,
-										symbols.dev.formatter ..
-										" " .. table.concat(names, ", "))
-								end
-
-								if #parts == 0 then
-									return "No LSP"
-								end
-
-								return table.concat(parts, " | ")
-							end,
-							icon = "",
-						},
 					},
-					lualine_y = { "filetype" },
-					lualine_z = { line_info },
-				},
-				extensions = { "fugitive", "nvim-tree" },
-			})
-		end,
-	},
+					quickfile = { enabled = true },
+					scope = { enabled = true },
+					scroll = { enabled = true },
+					statuscolumn = { enabled = true },
+					words = { enabled = true },
+					lazygit = { enabled = true },
+				})
 
-	-- Claude code
-	{
-		"coder/claudecode.nvim",
-		dependencies = { "folke/snacks.nvim" },
-		config = true,
-		keys = {
-			{ "<leader>v",  "<cmd>ClaudeCode<cr>",            desc = "Toggle Claude" },
-			{ "<leader>vf", "<cmd>ClaudeCodeFocus<cr>",       desc = "Focus Claude" },
-			{ "<leader>vr", "<cmd>ClaudeCode --resume<cr>",   desc = "Resume Claude" },
-			{ "<leader>vc", "<cmd>ClaudeCode --continue<cr>", desc = "Continue Claude" },
-			{ "<leader>vm", "<cmd>ClaudeCodeSelectModel<cr>", desc = "Select Claude model" },
-			{ "<leader>vb", "<cmd>ClaudeCodeAdd %<cr>",       desc = "Add current buffer" },
-			{ "<leader>vs", "<cmd>ClaudeCodeSend<cr>",        mode = "v",                  desc = "Send to Claude" },
-			{
-				"<leader>vB",
-				"<cmd>ClaudeCodeTreeAdd<cr>",
-				desc = "Add file",
-				ft = { "NvimTree", "neo-tree", "oil", "minifiles", "netrw" },
-			},
-			-- Diff management
-			{ "<leader>vv", "<cmd>ClaudeCodeDiffAccept<cr>", desc = "Accept diff" },
-			{ "<leader>vd", "<cmd>ClaudeCodeDiffDeny<cr>",   desc = "Deny diff" },
-		},
-	},
+				_G.dd = function(...) Snacks.debug.inspect(...) end
+				_G.bt = function() Snacks.debug.backtrace() end
+				vim._print = function(_, ...) _G.dd(...) end
 
+				keybinds.apply("snacks")
 
-	-- Copilot
-	{
-		"github/copilot.vim",
-		event = "InsertEnter",
-		init = function()
-			vim.g.copilot_no_tab_map = true
-		end,
-		config = function()
-			-- Accept full suggestion
-			vim.keymap.set("i", "<C-l>", 'copilot#Accept("\\<CR>")', {
-				expr = true,
-				replace_keycodes = false,
-				desc = "Accept Copilot suggestion",
-			})
-			-- Accept next word only
-			vim.keymap.set("i", "<M-l>", "<Plug>(copilot-accept-word)",
-				{ desc = "Accept Copilot word" })
-			-- Dismiss suggestion
-			vim.keymap.set("i", "<C-]>", "<Plug>(copilot-dismiss)",
-				{ desc = "Dismiss Copilot suggestion" })
-			-- Cycle suggestions
-			vim.keymap.set("i", "<M-n>", "<Plug>(copilot-next)",
-				{ desc = "Next Copilot suggestion" })
-			vim.keymap.set("i", "<M-p>", "<Plug>(copilot-prev)",
-				{ desc = "Prev Copilot suggestion" })
-		end,
-	},
-
-	-- Copilot Chat
-	{
-		"CopilotC-Nvim/CopilotChat.nvim",
-		dependencies = {
-			{ "github/copilot.vim" },
-			{ "nvim-lua/plenary.nvim" },
-		},
-		event = "VeryLazy",
-		config = function()
-			require("CopilotChat").setup({
-				model = "gpt-4o",
-				window = {
-					layout = "vertical",
-					width = 0.4,
-				},
-			})
-		end,
-		keys = {
-			{ "<leader>cc", "<cmd>CopilotChatToggle<cr>",   desc = "Toggle Copilot Chat" },
-			{ "<leader>cm", "<cmd>CopilotChatModels<cr>",   desc = "Select Copilot Model" },
-			{ "<leader>ce", "<cmd>CopilotChatExplain<cr>",  mode = { "n", "v" },          desc = "Copilot Explain" },
-			{ "<leader>cf", "<cmd>CopilotChatFix<cr>",      mode = { "n", "v" },          desc = "Copilot Fix" },
-			{ "<leader>co", "<cmd>CopilotChatOptimize<cr>", mode = { "n", "v" },          desc = "Copilot Optimize" },
-			{ "<leader>cr", "<cmd>CopilotChatReview<cr>",   mode = { "n", "v" },          desc = "Copilot Review" },
-			{ "<leader>ct", "<cmd>CopilotChatTests<cr>",    mode = { "n", "v" },          desc = "Copilot Tests" },
-			{
-				"<leader>cq",
-				function()
-					local input = vim.fn.input("Quick Chat: ")
-					if input ~= "" then
-						require("CopilotChat").ask(input,
-							{ selection = require("CopilotChat.select").buffer })
+				for _, toggle in ipairs(keybinds.snacks.toggles) do
+					if toggle.option then
+						Snacks.toggle.option(toggle.option,
+							{ name = toggle.name }):map(toggle.key)
+					elseif toggle.method then
+						Snacks.toggle[toggle.method]():map(toggle.key)
 					end
-				end,
-				desc = "Copilot Quick Chat",
-			},
+				end
+			end,
 		},
-	},
-})
+
+		--------------------------------------------------------------------
+		-- Web devicons (dependency for bufferline / lualine)
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/nvim-tree/nvim-web-devicons",
+		},
+
+		--------------------------------------------------------------------
+		-- Bufferline
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/akinsho/bufferline.nvim",
+			version = vim.version.range("*"),
+			config = function()
+				local bufferline = require("bufferline")
+				bufferline.setup({
+					options = {
+						mode = "buffers",
+						style_preset = bufferline.style_preset.default,
+						themable = true,
+						numbers = "ordinal",
+						name_formatter = function(buf)
+							local label = vim.b[buf.bufnr] and
+								vim.b[buf.bufnr].sc_diff_label
+							if label then return buf.name .. " " .. label end
+							return buf.name
+						end,
+						close_command = function(bufnr) _G.SmartCloseBuf(bufnr) end,
+						left_mouse_command = function(bufnr)
+							vim.api.nvim_set_current_buf(bufnr)
+						end,
+						right_mouse_command = nil,
+						middle_mouse_command = function(bufnr)
+							_G.SmartCloseBuf(bufnr)
+						end,
+						indicator = { style = "icon" },
+						buffer_close_icon = "󰅖",
+						modified_icon = "● ",
+						close_icon = " ",
+						left_trunc_marker = " ",
+						right_trunc_marker = " ",
+						max_name_length = 18,
+						max_prefix_length = 15,
+						truncate_names = true,
+						tab_size = 18,
+						diagnostics = "nvim_lsp",
+						diagnostics_update_on_event = true,
+						diagnostics_indicator = function(count, level)
+							local icon = level:match("error") and " " or " "
+							return " " .. icon .. count
+						end,
+						offsets = {
+							{
+								filetype = "snacks_layout_box",
+								text = "Explorer",
+								highlight = "Directory",
+								separator = true,
+							},
+							{
+								filetype = "sourcecontrol",
+								text = "Source Control",
+								highlight = "Directory",
+								separator = true,
+							},
+							{
+								filetype = "sourcecontrol_input",
+								text = "Source Control",
+								highlight = "Directory",
+								separator = true,
+							},
+						},
+						color_icons = true,
+						show_buffer_icons = true,
+						show_buffer_close_icons = true,
+						show_close_icon = true,
+						show_tab_indicators = true,
+						separator_style = "slant",
+					},
+				})
+				keybinds.apply("bufferline")
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Mini.map
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/echasnovski/mini.map",
+			version = vim.version.range("*"),
+			config = function()
+				local map = require("mini.map")
+
+				-- Custom integration: source control diff extmarks
+				local sc_diff_integration = function()
+					local ns_id = vim.api.nvim_create_namespace(
+						"sourcecontrol_diff")
+					local add_hl = "MiniMapSymbolDiffAdd"
+					local del_hl = "MiniMapSymbolDiffDelete"
+
+					vim.api.nvim_set_hl(0, add_hl, { fg = "#07ff00" })
+					vim.api.nvim_set_hl(0, del_hl, { fg = "#ff0000" })
+
+					return function()
+						local buf = vim.api.nvim_get_current_buf()
+						if not vim.b[buf].sc_diff_active then return {} end
+
+						local marks = vim.api.nvim_buf_get_extmarks(
+							buf, ns_id, 0, -1, { details = true })
+						local out = {}
+						for _, mark in ipairs(marks) do
+							local line = mark[2] + 1
+							local details = mark[4]
+							if details.line_hl_group == "DiffAdd" then
+								table.insert(out,
+									{ line = line, hl_group = add_hl })
+							elseif details.line_hl_group == "DiffDelete" then
+								table.insert(out,
+									{ line = line, hl_group = del_hl })
+							end
+							if details.virt_lines then
+								table.insert(out,
+									{ line = line, hl_group = del_hl })
+							end
+						end
+						return out
+					end
+				end
+
+				map.setup({
+					integrations = {
+						map.gen_integration.builtin_search(),
+						map.gen_integration.diagnostic({
+							error = "DiagnosticFloatingError",
+							warn = "DiagnosticFloatingWarn",
+							info = "DiagnosticFloatingInfo",
+							hint = "DiagnosticFloatingHint",
+						}),
+						map.gen_integration.diff(),
+						sc_diff_integration(),
+					},
+					symbols = {
+						encode = map.gen_encode_symbols.dot("4x2"),
+						scroll_line = "▶",
+						scroll_view = "┃",
+					},
+					window = {
+						focusable = false,
+						side = "right",
+						width = 10,
+						winblend = 10,
+						show_integration_count = false,
+					},
+				})
+
+				keybinds.apply("minimap")
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Treesitter
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/nvim-treesitter/nvim-treesitter",
+			version = "master",
+			config = function()
+				require("nvim-treesitter.configs").setup({
+					ensure_installed = {
+						"lua",
+						"typescript",
+						"javascript",
+						"html",
+						"css",
+						"go",
+						"gomod",
+						"gosum",
+						"gowork",
+						"json",
+						"bash",
+						"vim",
+						"markdown",
+						"markdown_inline",
+						"regex",
+						"yaml",
+						"toml",
+						"query",
+						"gitignore",
+					},
+					auto_install = true,
+					highlight = {
+						enable = true,
+						additional_vim_regex_highlighting = false,
+					},
+					indent = { enable = true },
+					incremental_selection = { enable = true },
+					rainbow = {
+						enable = true,
+						extended_mode = true,
+						max_file_lines = nil,
+					},
+				})
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Comment
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/numToStr/Comment.nvim",
+			config = function()
+				local toggle_key = keybinds.comment.binds.toggle.key
+				require("Comment").setup({
+					toggler = { line = toggle_key },
+					opleader = { line = toggle_key },
+				})
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Linting
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/mfussenegger/nvim-lint",
+			config = function()
+				local lint = require("lint")
+				lint.linters_by_ft = {
+					lua = { "luacheck" },
+					go = { "golangci-lint" },
+					javascript = { "eslint_d" },
+					javascriptreact = { "eslint_d" },
+					typescript = { "eslint_d" },
+					typescriptreact = { "eslint_d" },
+					html = { "esling_d" },
+				}
+
+				vim.api.nvim_create_autocmd(
+					{ "BufWritePost", "InsertLeave", "TextChanged",
+						"TextChangedI" },
+					{
+						callback = function() require("lint").try_lint() end,
+					})
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Formatting
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/stevearc/conform.nvim",
+			config = function()
+				require("conform").setup({
+					formatters_by_ft = {
+						lua = { "stylua" },
+						go = { "gofumpt", "goimports" },
+						javascript = { "prettierd", "prettier" },
+						javascriptreact = { "prettierd", "prettier" },
+						typescript = { "prettierd", "prettier" },
+						typescriptreact = { "prettierd", "prettier" },
+						html = { "prettierd", "prettier" },
+						css = { "prettierd", "prettier" },
+						scss = { "prettierd", "prettier" },
+						json = { "prettierd", "prettier" },
+						yaml = { "prettierd", "prettier" },
+						markdown = { "prettierd", "prettier" },
+					},
+					format_on_save = {
+						lsp_fallback = true,
+						timeout_ms = 1500,
+					},
+				})
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Lualine (bottom status bar)
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/nvim-lualine/lualine.nvim",
+			config = function()
+				local function line_info()
+					local line = vim.fn.line(".")
+					local col = vim.fn.col(".")
+					local total_lines = vim.fn.line("$")
+					return string.format("%d:%d / %d", line, col, total_lines)
+				end
+				require("lualine").setup({
+					options = {
+						theme = "nord",
+						section_separators = { left = "", right = "" },
+						component_separators = { left = "", right = "" },
+						globalstatus = true,
+					},
+					sections = {
+						lualine_b = { "branch" },
+						lualine_c = { "filename" },
+						lualine_x = {
+							{
+								"diagnostics",
+								sources = { "nvim_diagnostic" },
+								symbols = {
+									error = symbols.ui.error,
+									warn = symbols.ui.warn,
+									info = symbols.ui.info,
+									hint = symbols.ui.hint,
+								},
+							},
+							{
+								function()
+									local buf_clients = vim.lsp.get_clients({ bufnr = 0 })
+									local parts = {}
+
+									if #buf_clients > 0 then
+										local lsps = {}
+										for _, client in pairs(buf_clients) do
+											table.insert(lsps, client.name)
+										end
+										table.insert(parts,
+											symbols.dev.lsp ..
+											" " .. table.concat(lsps, ", "))
+									end
+
+									local linters = require("lint")
+										.linters_by_ft
+										[vim.bo.filetype] or {}
+									if #linters > 0 then
+										table.insert(parts,
+											symbols.dev.linter ..
+											" " .. table.concat(linters, ", "))
+									end
+
+									local formatters = require("conform")
+										.list_formatters(0)
+									if #formatters > 0 then
+										local names = {}
+										for _, f in ipairs(formatters) do
+											table.insert(names, f.name)
+										end
+										table.insert(parts,
+											symbols.dev.formatter ..
+											" " .. table.concat(names, ", "))
+									end
+
+									if #parts == 0 then
+										return "No LSP"
+									end
+
+									return table.concat(parts, " | ")
+								end,
+								icon = "",
+							},
+						},
+						lualine_y = { "filetype" },
+						lualine_z = { line_info },
+					},
+					extensions = { "fugitive", "nvim-tree" },
+				})
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Claude Code
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/coder/claudecode.nvim",
+			config = function()
+				require("claudecode").setup({})
+				keybinds.apply("claude")
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Copilot
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/github/copilot.vim",
+			version = "release",
+			config = function()
+				vim.g.copilot_no_tab_map = true
+				keybinds.apply("copilot")
+			end,
+		},
+
+		--------------------------------------------------------------------
+		-- Plenary (dependency for CopilotChat)
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/nvim-lua/plenary.nvim",
+		},
+
+		--------------------------------------------------------------------
+		-- Copilot Chat
+		--------------------------------------------------------------------
+		{
+			src = "https://github.com/CopilotC-Nvim/CopilotChat.nvim",
+			config = function()
+				require("CopilotChat").setup({
+					model = "gpt-4o",
+					window = {
+						layout = "vertical",
+						width = 0.4,
+					},
+				})
+				keybinds.apply("copilot_chat")
+			end,
+		},
+	})
+
+	-- Editor groups (must run after pack() so any plugin-set keys are in place)
+	require("editorgroup").setup({
+		vsplit_key = "<leader>\\",
+		close_group_key = "<leader>Q",
+	})
+end
+
+return M

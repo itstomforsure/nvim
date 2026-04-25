@@ -450,7 +450,7 @@ local function open_new()
 	buf_keybinds()
 end
 
-local function open_win()
+function M.open_win()
 	remember_focus()
 	prune_terminals()
 
@@ -544,6 +544,118 @@ terminal_tab_close = function(minwid, clicks, button, mods)
 	end
 end
 
+-------------------------------------------------------------------------------
+-- Session persistence API
+-------------------------------------------------------------------------------
+
+--- Create a terminal buffer in a specific working directory.
+--- Used internally by M.restore() to recreate saved terminals.
+local function create_terminal_at(cwd)
+	if not utils.is_win_valid(win) then
+		local scratch = utils.create_scratch_buf(nil)
+		win = utils.create_bottom_win(scratch, win, { height = 15 })
+		if not utils.is_win_valid(win) then return end
+		vim.api.nvim_set_current_win(win)
+		if scratch and utils.is_buf_valid(scratch) and scratch ~= vim.api.nvim_win_get_buf(win) then
+			pcall(vim.api.nvim_buf_delete, scratch, { force = true })
+		end
+	else
+		vim.api.nvim_set_current_win(win)
+		set_terminal_window_lock(win, false)
+	end
+
+	-- Set window-local cwd so :terminal inherits it
+	if cwd and vim.fn.isdirectory(cwd) == 1 then
+		vim.cmd("lcd " .. vim.fn.fnameescape(cwd))
+	end
+
+	local ok = pcall(vim.cmd, "terminal")
+	if not ok then
+		set_terminal_window_lock(win, true)
+		return
+	end
+
+	buf = vim.api.nvim_get_current_buf()
+	set_terminal_buf_opts(buf)
+	add_terminal(buf)
+	set_terminal_window_lock(win, true)
+	set_terminal_winbar()
+	buf_keybinds()
+end
+
+--- Serialize terminal state for session persistence.
+--- Returns a table with terminal cwds, visibility, and current index.
+function M.serialize()
+	prune_terminals()
+	local data = {
+		terminals = {},
+		visible = utils.is_win_valid(win),
+		current_index = current_index,
+	}
+	for _, term_buf in ipairs(terminals) do
+		local cwd = nil
+		if utils.is_buf_valid(term_buf) then
+			local pid = vim.b[term_buf].terminal_job_pid
+			if pid then
+				local ok, resolved = pcall(vim.uv.fs_readlink, "/proc/" .. pid .. "/cwd")
+				if ok and resolved then
+					cwd = resolved
+				end
+			end
+		end
+		table.insert(data.terminals, { cwd = cwd })
+	end
+	return data
+end
+
+--- Close all terminals and their window. Used before session restore.
+function M.close_all()
+	if utils.is_win_valid(win) then
+		set_terminal_window_lock(win, false)
+		pcall(vim.api.nvim_win_close, win, true)
+		win = nil
+	end
+
+	local to_delete = {}
+	for _, term_buf in ipairs(terminals) do
+		table.insert(to_delete, term_buf)
+	end
+	terminals = {}
+	buf = nil
+	current_index = nil
+
+	for _, term_buf in ipairs(to_delete) do
+		if utils.is_buf_valid(term_buf) then
+			pcall(vim.api.nvim_buf_delete, term_buf, { force = true })
+		end
+	end
+end
+
+--- Restore terminals from serialized session data.
+function M.restore(data)
+	if not data or not data.terminals or #data.terminals == 0 then return end
+
+	for _, term_data in ipairs(data.terminals) do
+		create_terminal_at(term_data.cwd)
+	end
+
+	-- Set current index to saved position
+	if data.current_index and data.current_index >= 1 and data.current_index <= #terminals then
+		current_index = data.current_index
+		buf = terminals[current_index]
+		if utils.is_win_valid(win) then
+			set_terminal_window_buf(win, buf)
+			set_terminal_winbar()
+		end
+	end
+
+	if not data.visible then
+		close()
+	else
+		vim.cmd("stopinsert")
+	end
+end
+
 function M.setup(config)
 	if type(config) == "string" then
 		config = { keybind = config }
@@ -551,7 +663,8 @@ function M.setup(config)
 	config = config or {}
 
 	if not lifecycle_group then
-		lifecycle_group = vim.api.nvim_create_augroup("TerminalLifecycle", { clear = true })
+		lifecycle_group = vim.api.nvim_create_augroup("TerminalLifecycle",
+			{ clear = true })
 
 		vim.api.nvim_create_autocmd("WinClosed", {
 			group = lifecycle_group,
@@ -604,7 +717,7 @@ function M.setup(config)
 		desc = "Open terminal window",
 	}
 	if keybinds.open then
-		vim.keymap.set({ "n", "v" }, keybinds.open, open_win, opts)
+		vim.keymap.set({ "n", "v" }, keybinds.open, M.open_win, opts)
 	end
 
 	if keybinds.new then
