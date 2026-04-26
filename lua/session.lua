@@ -32,18 +32,30 @@ local function get_branch()
 	return branch
 end
 
-local function repo_id()
-	local root = git_root()
+local function repo_id_from_root(root)
 	if not root then return nil end
 	return root:gsub("^/", ""):gsub("/", "__")
 end
 
-local function session_path(branch)
-	local id = repo_id()
+local function repo_id()
+	return repo_id_from_root(git_root())
+end
+
+local function session_path_for(base, root, branch)
+	local id = repo_id_from_root(root)
 	if not id or not branch then return nil end
 	local safe_branch = branch:gsub("/", "__")
-	return state_base .. "/" .. id .. "/" .. safe_branch .. ".json"
+	return base .. "/" .. id .. "/" .. safe_branch .. ".json"
 end
+
+local function session_path(branch)
+	return session_path_for(state_base, git_root(), branch)
+end
+
+M._internal = {
+	repo_id_from_root = repo_id_from_root,
+	session_path_for = session_path_for,
+}
 
 -------------------------------------------------------------------------------
 -- JSON persistence

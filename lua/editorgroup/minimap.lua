@@ -34,7 +34,9 @@ local DOT = {
 	[3] = { [0] = 0x40, [1] = 0x80 },
 }
 
-local function encode(lines, map_width)
+M._internal = {}
+
+function M._internal.encode(lines, map_width)
 	-- Find max line length for horizontal scaling
 	local max_len = 0
 	for _, l in ipairs(lines) do
@@ -74,6 +76,8 @@ local function encode(lines, map_width)
 
 	return out
 end
+
+local encode = M._internal.encode
 
 -------------------------------------------------------------------------------
 -- Floating window helpers

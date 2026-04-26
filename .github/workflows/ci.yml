@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The framework targets Neovim 0.12+ (vim.pack), but the tested code
+        # uses only standard vim.api/vim.fn so older versions can run the
+        # specs too — keep the matrix wide to catch incidental regressions.
+        nvim: [stable, nightly]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.nvim }}
+
+      - name: Run tests
+        run: bash tests/run.sh

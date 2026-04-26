@@ -1,0 +1,43 @@
+local utils = require("utils")
+
+describe("utils.is_buf_valid", function()
+	it("returns false for nil", function()
+		assert.is_false(utils.is_buf_valid(nil))
+	end)
+
+	it("returns false for an unknown buffer handle", function()
+		assert.is_false(utils.is_buf_valid(999999))
+	end)
+
+	it("returns true for a freshly created buffer", function()
+		local buf = vim.api.nvim_create_buf(false, true)
+		assert.is_true(utils.is_buf_valid(buf))
+		vim.api.nvim_buf_delete(buf, { force = true })
+	end)
+end)
+
+describe("utils.is_win_valid", function()
+	it("returns false for nil", function()
+		assert.is_false(utils.is_win_valid(nil))
+	end)
+
+	it("returns false for an unknown window handle", function()
+		assert.is_false(utils.is_win_valid(999999))
+	end)
+end)
+
+describe("utils.create_scratch_buf", function()
+	it("creates a new scratch buffer when given nil", function()
+		local buf = utils.create_scratch_buf(nil)
+		assert.is_true(vim.api.nvim_buf_is_valid(buf))
+		assert.equals("nofile", vim.bo[buf].buftype)
+		vim.api.nvim_buf_delete(buf, { force = true })
+	end)
+
+	it("returns the existing buffer when it is still valid", function()
+		local existing = vim.api.nvim_create_buf(false, true)
+		local result = utils.create_scratch_buf(existing)
+		assert.equals(existing, result)
+		vim.api.nvim_buf_delete(existing, { force = true })
+	end)
+end)

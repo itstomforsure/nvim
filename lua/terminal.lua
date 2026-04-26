@@ -450,6 +450,32 @@ local function open_new()
 	buf_keybinds()
 end
 
+M._internal = {
+	add = add_terminal,
+	remove = remove_terminal,
+	prune = prune_terminals,
+	build_tabline = build_tabline,
+	build_hints = build_hints,
+	is_terminal_buf = is_terminal_buf,
+	reset = function()
+		terminals = {}
+		current_index = nil
+		buf = nil
+		keybinds = { open = "<leader>t", new = "<leader>T", prev = nil, next = nil }
+	end,
+	state = function()
+		return {
+			terminals = terminals,
+			current_index = current_index,
+			buf = buf,
+			keybinds = keybinds,
+		}
+	end,
+	set_keybinds = function(kb)
+		keybinds = vim.tbl_extend("force", keybinds, kb or {})
+	end,
+}
+
 function M.open_win()
 	remember_focus()
 	prune_terminals()
