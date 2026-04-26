@@ -54,13 +54,48 @@ M.config = {
 			-- Default zone: regular file buffers
 		},
 	},
+	-- Special non-file buffers that should still be treated as editor content
+	-- and kept out of explorer/sidebar/terminal windows.
+	editor_buffers = {
+		buftypes = { "help", "quickfix" },
+		filetypes = { "help", "man", "checkhealth", "qf" },
+	},
+	-- Open docs/health buffers as centered floats to avoid disturbing layout
+	-- splits. Set enabled=false to disable this behavior.
+	floating_docs = {
+		enabled = true,
+		filetypes = { "help", "man", "checkhealth" },
+		width = 0.78,
+		height = 0.82,
+		border = "rounded",
+	},
 }
+
+local function is_floating_win(win)
+	if not vim.api.nvim_win_is_valid(win) then
+		return false
+	end
+	local cfg = vim.api.nvim_win_get_config(win)
+	return cfg and cfg.relative and cfg.relative ~= ""
+end
+
+local function contains(list, value)
+	for _, item in ipairs(list or {}) do
+		if item == value then
+			return true
+		end
+	end
+	return false
+end
 
 -- Zone tracking
 --- Determine which zone a window belongs to based on its buffer content.
 --- Returns the zone name string.
 function M.classify_win(win)
 	if not vim.api.nvim_win_is_valid(win) then
+		return nil
+	end
+	if is_floating_win(win) then
 		return nil
 	end
 
@@ -120,7 +155,7 @@ end
 --- Prefers: current window if editor > last accessed editor window > any editor window
 function M.get_editor_win()
 	local cur = vim.api.nvim_get_current_win()
-	if M.get_zone(cur) == "editor" then
+	if not is_floating_win(cur) and M.get_zone(cur) == "editor" then
 		return cur
 	end
 
@@ -129,7 +164,7 @@ function M.get_editor_win()
 	local best_lastused = -1
 
 	for _, win in ipairs(vim.api.nvim_list_wins()) do
-		if vim.api.nvim_win_is_valid(win) then
+		if vim.api.nvim_win_is_valid(win) and not is_floating_win(win) then
 			local zone = M.get_zone(win)
 			if zone == "editor" then
 				local info = vim.fn.getwininfo(win)[1]
@@ -191,22 +226,33 @@ local function is_file_buf(buf)
 	return true
 end
 
---- The autocmd callback that redirects file buffers away from non-editor zones.
+local function is_editor_special_buf(buf)
+	if not vim.api.nvim_buf_is_valid(buf) then return false end
+
+	local cfg = M.config.editor_buffers or {}
+	local ft = vim.bo[buf].filetype
+	local bt = vim.bo[buf].buftype
+
+	return contains(cfg.filetypes, ft) or contains(cfg.buftypes, bt)
+end
+
+--- The autocmd callback that redirects editor buffers away from non-editor zones.
 local function route_buffer(ev)
 	local buf = ev.buf
 	local win = vim.api.nvim_get_current_win()
+	if is_floating_win(win) then return end
 
-	-- Only care about file buffers landing in non-editor zones
-	if not is_file_buf(buf) then return end
+	-- Only care about editor-content buffers landing in non-editor zones.
+	if not is_file_buf(buf) and not is_editor_special_buf(buf) then return end
 
 	local zone = M.get_zone(win)
 	if not zone or zone == "editor" then
-		-- Good - file is in the right place. Ensure it's tagged.
+		-- Good - buffer is in the right place. Ensure it's tagged.
 		M.tag_win(win, "editor")
 		return
 	end
 
-	-- File buffer appeared in a non-editor zone - redirect it
+	-- Buffer appeared in a non-editor zone - redirect it.
 	local editor_win = M.get_editor_win()
 	if not editor_win or editor_win == win then
 		-- No separate editor window available; don't break anything
@@ -235,13 +281,67 @@ local function route_buffer(ev)
 	end)
 end
 
+local function should_float_doc(buf)
+	if not vim.api.nvim_buf_is_valid(buf) then
+		return false
+	end
+	local cfg = M.config.floating_docs or {}
+	if not cfg.enabled then
+		return false
+	end
+	return contains(cfg.filetypes, vim.bo[buf].filetype)
+end
+
+local function open_doc_float(buf)
+	local src_win = vim.fn.bufwinid(buf)
+	if src_win == -1 or not vim.api.nvim_win_is_valid(src_win) then return end
+	if is_floating_win(src_win) then return end
+
+	local cfg = M.config.floating_docs or {}
+	local width = math.floor(vim.o.columns * (cfg.width or 0.78))
+	local height = math.floor((vim.o.lines - vim.o.cmdheight - 1) * (cfg.height or 0.82))
+	width = math.max(60, math.min(width, vim.o.columns - 4))
+	height = math.max(10, math.min(height, vim.o.lines - 4))
+
+	local row = math.max(1, math.floor((vim.o.lines - height) / 2) - 1)
+	local col = math.max(1, math.floor((vim.o.columns - width) / 2))
+
+	local float = vim.api.nvim_open_win(buf, true, {
+		relative = "editor",
+		style = "minimal",
+		border = cfg.border or "rounded",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+	})
+
+	vim.wo[float].number = false
+	vim.wo[float].relativenumber = false
+	vim.wo[float].linebreak = true
+	vim.wo[float].wrap = true
+
+	local other_layout_wins = 0
+	for _, win in ipairs(vim.api.nvim_list_wins()) do
+		if win ~= src_win and not is_floating_win(win) then
+			other_layout_wins = other_layout_wins + 1
+		end
+	end
+
+	if vim.api.nvim_win_is_valid(src_win) and src_win ~= float and other_layout_wins > 0 then
+		pcall(vim.api.nvim_win_close, src_win, true)
+	end
+end
+
 -- Auto-tagging
 --- Scan all windows and tag them with their zones.
 function M.tag_all_windows()
 	for _, win in ipairs(vim.api.nvim_list_wins()) do
-		local zone = M.classify_win(win)
-		if zone then
-			M.tag_win(win, zone)
+		if not is_floating_win(win) then
+			local zone = M.classify_win(win)
+			if zone then
+				M.tag_win(win, zone)
+			end
 		end
 	end
 end
@@ -260,11 +360,23 @@ function M.init(opts)
 		callback = route_buffer,
 	})
 
+	-- Float help/man/checkhealth in the center (after the window exists).
+	vim.api.nvim_create_autocmd("FileType", {
+		group = group,
+		callback = function(ev)
+			if not should_float_doc(ev.buf) then return end
+			vim.schedule(function()
+				open_doc_float(ev.buf)
+			end)
+		end,
+	})
+
 	-- Re-tag windows when buffers change (catches zone windows being created)
 	vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "FileType" }, {
 		group = group,
 		callback = function()
 			local win = vim.api.nvim_get_current_win()
+			if is_floating_win(win) then return end
 			local zone = M.classify_win(win)
 			if zone then
 				M.tag_win(win, zone)

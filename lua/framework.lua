@@ -37,6 +37,12 @@ function M.init()
 	--- Mapleader
 	vim.g.mapleader = " "
 
+	-- Prefer centered floating checkhealth output to avoid disturbing split layout.
+	if type(vim.g.health) ~= "table" then
+		vim.g.health = {}
+	end
+	vim.g.health.style = "float"
+
 	--- Keybindings & symbols
 	local keybinds = require('keybindings')
 	local symbols = require("symbols")
@@ -49,6 +55,10 @@ function M.init()
 
 	--- Plugins
 	require("plugins").init(keybinds, symbols)
+
+	--- Route built-in Vim messages (echo/echomsg/errors/print/shell output)
+	--- into vim.notify so they appear in Snacks notification history (<leader>n).
+	require("notifications").init()
 
 	--- LSP
 	require("lsp").init(keybinds, symbols)

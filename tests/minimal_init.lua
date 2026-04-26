@@ -7,6 +7,7 @@ local project_root = vim.fn.fnamemodify(
 
 vim.opt.rtp:prepend(project_root)
 vim.opt.rtp:prepend(project_root .. "/tests/.deps/plenary.nvim")
+vim.opt.swapfile = false
 
 vim.cmd("runtime plugin/plenary.vim")
 require("plenary.busted")
