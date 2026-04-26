@@ -1,5 +1,4 @@
 .DS_Store
 nvim-pack-lock.json
 .claude
-.git
 tests/.deps/
