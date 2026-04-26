@@ -83,6 +83,11 @@ local function get_matches(query)
 	return matches
 end
 
+M._internal = {
+	get_matches = get_matches,
+	set_target_buf = function(b) target_buf = b end,
+}
+
 local function update_search_list_highlight()
 	local line_id = search_list.selected_id - 1
 	vim.api.nvim_buf_add_highlight(search_list.buf, -1, "Search", line_id, 0, -1)

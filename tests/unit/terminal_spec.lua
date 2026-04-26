@@ -1,0 +1,113 @@
+local terminal = require("terminal")
+local internal = terminal._internal
+
+-- Most state-machine helpers don't validate is_terminal_buf, so we use
+-- plain integers as buffer-handle stand-ins. prune() is excluded — it
+-- requires real buftype="terminal" buffers (integration territory).
+
+describe("terminal._internal state machine", function()
+	before_each(function() internal.reset() end)
+
+	describe("add", function()
+		it("appends a buffer and tracks it as current", function()
+			internal.add(101)
+			local s = internal.state()
+			assert.same({ 101 }, s.terminals)
+			assert.equals(1, s.current_index)
+			assert.equals(101, s.buf)
+		end)
+
+		it("appends additional buffers in order", function()
+			internal.add(101); internal.add(202); internal.add(303)
+			local s = internal.state()
+			assert.same({ 101, 202, 303 }, s.terminals)
+			assert.equals(3, s.current_index)
+			assert.equals(303, s.buf)
+		end)
+
+		it("re-selects an existing buffer instead of duplicating", function()
+			internal.add(101); internal.add(202); internal.add(101)
+			local s = internal.state()
+			assert.same({ 101, 202 }, s.terminals)
+			assert.equals(1, s.current_index)
+		end)
+	end)
+
+	describe("remove", function()
+		it("clears state when the last buffer is removed", function()
+			internal.add(101); internal.remove(101)
+			local s = internal.state()
+			assert.same({}, s.terminals)
+			assert.is_nil(s.current_index)
+			assert.is_nil(s.buf)
+		end)
+
+		it("decrements current_index when removing a buffer before it", function()
+			internal.add(101); internal.add(202); internal.add(303)
+			internal.remove(101)
+			local s = internal.state()
+			assert.same({ 202, 303 }, s.terminals)
+			assert.equals(2, s.current_index)
+		end)
+
+		it("preserves logical position when removing the current tail", function()
+			internal.add(101); internal.add(202); internal.add(303)
+			internal.remove(303)
+			local s = internal.state()
+			assert.same({ 101, 202 }, s.terminals)
+			assert.equals(2, s.current_index)
+		end)
+
+		it("is a no-op when buffer is not tracked", function()
+			internal.add(101); internal.remove(999)
+			assert.same({ 101 }, internal.state().terminals)
+		end)
+	end)
+
+	describe("build_tabline", function()
+		it("returns empty string with 0 or 1 terminals", function()
+			assert.equals("", internal.build_tabline())
+			internal.add(101)
+			assert.equals("", internal.build_tabline())
+		end)
+
+		it("renders one tab + close per terminal when there are >=2", function()
+			internal.add(101); internal.add(202)
+			local out = internal.build_tabline()
+			assert.is_truthy(out:find(" 1 ", 1, true))
+			assert.is_truthy(out:find(" 2 ", 1, true))
+			local _, count = out:gsub(" x ", " x ")
+			assert.equals(2, count)
+		end)
+
+		it("highlights only the current_index tab with TabLineSel", function()
+			internal.add(101); internal.add(202)
+			local _, sel = internal.build_tabline():gsub("TabLineSel", "")
+			-- Active tab contributes 2 TabLineSel occurrences (label + close).
+			assert.equals(2, sel)
+		end)
+	end)
+
+	describe("build_hints", function()
+		it("includes the always-on hints", function()
+			local out = internal.build_hints()
+			assert.is_truthy(out:find("[Esc]", 1, true))
+			assert.is_truthy(out:find("[q] close", 1, true))
+		end)
+
+		it("appends configured optional keybinds", function()
+			internal.set_keybinds({ new = "<leader>T", prev = "[t", next = "]t" })
+			local out = internal.build_hints()
+			assert.is_truthy(out:find("<leader>T", 1, true))
+			assert.is_truthy(out:find("[t", 1, true))
+			assert.is_truthy(out:find("]t", 1, true))
+		end)
+
+		it("omits prev/next hints when those keybinds are unset", function()
+			-- After reset(), prev and next default to nil; new defaults to <leader>T.
+			local out = internal.build_hints()
+			assert.is_nil(out:find("] prev", 1, true))
+			assert.is_nil(out:find("] next", 1, true))
+		end)
+	end)
+end)

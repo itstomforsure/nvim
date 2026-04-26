@@ -90,6 +90,32 @@ local function git_root()
 	return vim.fn.getcwd()
 end
 
+local function parse_porcelain(lines)
+	local result = { staged = {}, changes = {}, untracked = {} }
+
+	for _, line in ipairs(lines or {}) do
+		if #line >= 3 then
+			local x = line:sub(1, 1)
+			local y = line:sub(2, 2)
+			local path = line:sub(4)
+			local display = path:match("-> (.+)$") or path
+
+			if x == "?" then
+				table.insert(result.untracked, { status = "?", file = display })
+			else
+				if x ~= " " then
+					table.insert(result.staged, { status = x, file = display })
+				end
+				if y ~= " " then
+					table.insert(result.changes, { status = y, file = display })
+				end
+			end
+		end
+	end
+
+	return result
+end
+
 local function parse_status()
 	for _, sec in ipairs(state.sections) do
 		sec.items = {}
@@ -127,32 +153,14 @@ local function parse_status()
 	local output = vim.fn.systemlist("git status --porcelain=v1 2>/dev/null")
 	if vim.v.shell_error ~= 0 then return end
 
-	for _, line in ipairs(output) do
-		if #line >= 3 then
-			local x = line:sub(1, 1)
-			local y = line:sub(2, 2)
-			local path = line:sub(4)
-			local display = path:match("-> (.+)$") or path
+	local parsed = parse_porcelain(output)
+	get_section("staged").items = parsed.staged
+	get_section("changes").items = parsed.changes
+	get_section("untracked").items = parsed.untracked
 
-			if x == "?" then
-				table.insert(get_section("untracked").items,
-					{ status = "?", file = display })
-			else
-				if x ~= " " then
-					table.insert(get_section("staged").items,
-						{ status = x, file = display })
-				end
-				if y ~= " " then
-					table.insert(get_section("changes").items,
-						{ status = y, file = display })
-				end
-			end
-		end
-	end
-
-	state.has_changes = #get_section("staged").items > 0
-		or #get_section("changes").items > 0
-		or #get_section("untracked").items > 0
+	state.has_changes = #parsed.staged > 0
+		or #parsed.changes > 0
+		or #parsed.untracked > 0
 end
 
 -- Commit ---------------------------------------------------------------------
@@ -884,5 +892,13 @@ function M.setup()
 		end,
 	})
 end
+
+M._internal = {
+	get_section = get_section,
+	parse_porcelain = parse_porcelain,
+	lines_to_text = lines_to_text,
+	file_icon = file_icon,
+	state = state,
+}
 
 return M

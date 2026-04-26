@@ -67,6 +67,12 @@ local function get_all_history()
 	return history
 end
 
+M._internal = {
+	get_all_history = get_all_history,
+	command_line = command_line,
+	command_history = command_history,
+}
+
 local function update_command_line_content()
 	if not utils.is_buf_valid(command_line.buf) or not utils.is_win_valid(command_line.win) then
 		return
@@ -150,6 +156,8 @@ local function navigate_command_history(direction)
 	update_command_line_content()
 	update_command_history_highlight()
 end
+
+M._internal.navigate_command_history = navigate_command_history
 
 local function open_command_history_win()
 	if utils.is_win_valid(command_history.win) then

@@ -154,9 +154,9 @@ local function setup_attach_keymaps(keybinds)
 	})
 end
 
-local function discover_servers()
+local function discover_servers(lsp_dir)
+	lsp_dir = lsp_dir or (vim.fn.stdpath("config") .. "/lsp")
 	local names = {}
-	local lsp_dir = vim.fn.stdpath("config") .. "/lsp"
 	if vim.fn.isdirectory(lsp_dir) == 0 then return names end
 
 	for _, file in ipairs(vim.fn.readdir(lsp_dir)) do
@@ -165,6 +165,8 @@ local function discover_servers()
 	end
 	return names
 end
+
+M._internal = { discover_servers = discover_servers }
 
 function M.init(keybinds, symbols)
 	vim.lsp.inlay_hint.enable()
