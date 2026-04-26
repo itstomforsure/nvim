@@ -18,7 +18,10 @@ vim.keymap.set({ "n", "t", "v" }, "<C-v>", '"+p')
 local M = {
 	comment = {
 		binds = {
-			toggle = { key = "<leader>/", mode = { "n", "v" }, desc = "Toggle comment" },
+			-- Native Neovim commenting (gcc / gc) re-bound to <leader>/.
+			-- Needs remap=true because gcc / gc are themselves mappings.
+			toggle_line   = { key = "<leader>/", mode = "n", cmd = "gcc", remap = true, desc = "Toggle comment (line)" },
+			toggle_visual = { key = "<leader>/", mode = "v", cmd = "gc",  remap = true, desc = "Toggle comment (selection)" },
 		},
 	},
 	terminal = {
@@ -391,6 +394,7 @@ function M.apply(plugin_name)
 			desc = bind.desc,
 			nowait = bind.nowait,
 			expr = bind.expr,
+			remap = bind.remap,
 			replace_keycodes = bind.replace_keycodes,
 			silent = true,
 		})

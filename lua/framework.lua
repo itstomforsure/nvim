@@ -41,6 +41,9 @@ function M.init()
 	local keybinds = require('keybindings')
 	local symbols = require("symbols")
 
+	--- Native commenting (Neovim 0.10+ ships gcc / gc); re-bound to <leader>/.
+	keybinds.apply("comment")
+
 	--- Layout engine
 	require("layout").init()
 

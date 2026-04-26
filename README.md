@@ -89,3 +89,43 @@ Plugins call `keybinds.apply("bufferline")` to bind them via `vim.keymap.set`.
 through the cmdline (now via UI2). The `BufWritePost` autocmd in
 `framework.lua` is the only place that explicitly calls `vim.notify` for a
 visible toast.
+
+## Fresh install (Arch)
+
+One-shot bootstrap on a clean Arch system. Installs Neovim, every system
+dependency the plugin set expects, all LSPs / linters / formatters, then
+clones this config and seeds plugins + treesitter parsers headlessly.
+
+```bash
+sudo pacman -S --needed \
+  neovim git base-devel \
+  tree-sitter tree-sitter-cli \
+  ripgrep fd fzf lazygit \
+  wl-clipboard \
+  ghostscript tectonic \
+  lynx github-cli \
+  stylua gofumpt \
+  luacheck golangci-lint \
+  go gopls lua-language-server \
+  nodejs npm \
+  ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono \
+&& npm install -g \
+     typescript \
+     typescript-language-server \
+     eslint_d \
+     prettier \
+     @fsouza/prettierd \
+     @mermaid-js/mermaid-cli \
+&& go install golang.org/x/tools/cmd/goimports@latest \
+&& git clone https://github.com/itstomforsure/nvim.git ~/.config/nvim \
+&& nvim --headless "+lua vim.pack.update()" "+qa" \
+&& nvim --headless "+TSUpdate" "+qa"
+```
+
+Post-install:
+
+- Add `export PATH="$HOME/go/bin:$PATH"` to your shell rc so `goimports` is
+  found by conform/nvim-lint.
+- `:Copilot setup` once for GitHub Copilot auth (interactive).
+- `lsp/angularls.lua` is gated on `$NVM_DIR`; install nvm + `npm i -g
+  @angular/language-server` under an nvm node if you need Angular support.

@@ -277,57 +277,103 @@ function M.init(keybinds, symbols)
 		--------------------------------------------------------------------
 		{
 			src = "https://github.com/nvim-treesitter/nvim-treesitter",
-			version = "master",
+			version = "main",
 			config = function()
-				require("nvim-treesitter.configs").setup({
-					ensure_installed = {
-						"lua",
-						"typescript",
-						"javascript",
-						"html",
-						"css",
-						"go",
-						"gomod",
-						"gosum",
-						"gowork",
-						"json",
-						"bash",
-						"vim",
-						"markdown",
-						"markdown_inline",
-						"regex",
-						"yaml",
-						"toml",
-						"query",
-						"gitignore",
-					},
-					auto_install = true,
-					highlight = {
-						enable = true,
-						additional_vim_regex_highlighting = false,
-					},
-					indent = { enable = true },
-					incremental_selection = { enable = true },
-					rainbow = {
-						enable = true,
-						extended_mode = true,
-						max_file_lines = nil,
-					},
-				})
-			end,
-		},
+				local ts_install = require("nvim-treesitter.install")
 
-		--------------------------------------------------------------------
-		-- Comment
-		--------------------------------------------------------------------
-		{
-			src = "https://github.com/numToStr/Comment.nvim",
-			config = function()
-				local toggle_key = keybinds.comment.binds.toggle.key
-				require("Comment").setup({
-					toggler = { line = toggle_key },
-					opleader = { line = toggle_key },
+				ts_install.ensure_installed({
+					"lua",
+					"typescript",
+					"javascript",
+					"html",
+					"css",
+					"go",
+					"gomod",
+					"gosum",
+					"gowork",
+					"json",
+					"bash",
+					"vim",
+					"markdown",
+					"markdown_inline",
+					"regex",
+					"yaml",
+					"toml",
+					"query",
+					"gitignore",
 				})
+
+				-- v1.0 has no setup({highlight=..., indent=...}). Start
+				-- treesitter per buffer on FileType; pcall guards filetypes
+				-- without an installed parser.
+				vim.api.nvim_create_autocmd("FileType", {
+					group = vim.api.nvim_create_augroup(
+						"UserTreesitter", { clear = true }),
+					callback = function(ev)
+						if pcall(vim.treesitter.start, ev.buf) then
+							vim.bo[ev.buf].indentexpr = "nvim_treesitter#indent()"
+						end
+					end,
+				})
+
+				-- Incremental selection (legacy gnn / grn / grc / grm).
+				-- v1.0 dropped the built-in module; this re-implements it
+				-- on top of vim.treesitter.get_node + the < / > marks.
+				local sel_stack = {}
+
+				local function set_selection(node)
+					local srow, scol, erow, ecol = node:range()
+					vim.api.nvim_buf_set_mark(0, "<", srow + 1, scol, {})
+					vim.api.nvim_buf_set_mark(0, ">",
+						erow + 1, math.max(0, ecol - 1), {})
+					vim.cmd("normal! gv")
+				end
+
+				vim.keymap.set("n", "gnn", function()
+					local node = vim.treesitter.get_node()
+					if not node then return end
+					sel_stack = { node }
+					set_selection(node)
+				end, { desc = "TS: init selection" })
+
+				vim.keymap.set({ "x", "v" }, "grn", function()
+					local top = sel_stack[#sel_stack]
+					if not top then return end
+					local parent = top:parent()
+					if not parent then return end
+					table.insert(sel_stack, parent)
+					set_selection(parent)
+				end, { desc = "TS: expand to parent node" })
+
+				vim.keymap.set({ "x", "v" }, "grm", function()
+					if #sel_stack <= 1 then return end
+					table.remove(sel_stack)
+					set_selection(sel_stack[#sel_stack])
+				end, { desc = "TS: shrink to child node" })
+
+				-- grc: climb to the nearest named ancestor whose type looks
+				-- like a scope (function/block/loop/conditional). Falls
+				-- through to plain parent if none match.
+				local SCOPE_TYPES = {
+					function_definition = true, function_declaration = true,
+					method_definition = true, ["function"] = true,
+					block = true, if_statement = true, for_statement = true,
+					while_statement = true, do_statement = true,
+					repeat_statement = true,
+				}
+
+				vim.keymap.set({ "x", "v" }, "grc", function()
+					local top = sel_stack[#sel_stack]
+					if not top then return end
+					local node = top:parent()
+					while node and not SCOPE_TYPES[node:type()] do
+						node = node:parent()
+					end
+					node = node or (top:parent())
+					if not node then return end
+					table.insert(sel_stack, node)
+					set_selection(node)
+				end, { desc = "TS: expand to scope" })
 			end,
 		},
 
@@ -345,7 +391,7 @@ function M.init(keybinds, symbols)
 					javascriptreact = { "eslint_d" },
 					typescript = { "eslint_d" },
 					typescriptreact = { "eslint_d" },
-					html = { "esling_d" },
+					html = { "eslint_d" },
 				}
 
 				vim.api.nvim_create_autocmd(
