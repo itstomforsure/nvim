@@ -279,9 +279,9 @@ function M.init(keybinds, symbols)
 			src = "https://github.com/nvim-treesitter/nvim-treesitter",
 			version = "main",
 			config = function()
-				local ts = require("nvim-treesitter")
+				local ts_install = require("nvim-treesitter.install")
 
-				ts.install({
+				ts_install.ensure_installed({
 					"lua",
 					"typescript",
 					"javascript",
@@ -310,9 +310,8 @@ function M.init(keybinds, symbols)
 					group = vim.api.nvim_create_augroup(
 						"UserTreesitter", { clear = true }),
 					callback = function(ev)
-						if pcall(vim.treesitter.start) then
-							vim.bo[ev.buf].indentexpr =
-								"v:lua.require'nvim-treesitter'.indentexpr()"
+						if pcall(vim.treesitter.start, ev.buf) then
+							vim.bo[ev.buf].indentexpr = "nvim_treesitter#indent()"
 						end
 					end,
 				})
@@ -379,20 +378,6 @@ function M.init(keybinds, symbols)
 		},
 
 		--------------------------------------------------------------------
-		-- Comment
-		--------------------------------------------------------------------
-		{
-			src = "https://github.com/numToStr/Comment.nvim",
-			config = function()
-				local toggle_key = keybinds.comment.binds.toggle.key
-				require("Comment").setup({
-					toggler = { line = toggle_key },
-					opleader = { line = toggle_key },
-				})
-			end,
-		},
-
-		--------------------------------------------------------------------
 		-- Linting
 		--------------------------------------------------------------------
 		{
@@ -406,7 +391,7 @@ function M.init(keybinds, symbols)
 					javascriptreact = { "eslint_d" },
 					typescript = { "eslint_d" },
 					typescriptreact = { "eslint_d" },
-					html = { "esling_d" },
+					html = { "eslint_d" },
 				}
 
 				vim.api.nvim_create_autocmd(

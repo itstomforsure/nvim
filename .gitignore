@@ -1,4 +1,5 @@
 .DS_Store
 nvim-pack-lock.json
 .claude
+.codex
 tests/.deps/
