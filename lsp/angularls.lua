@@ -9,28 +9,42 @@ local function disabled(reason)
 	return { filetypes = {} }
 end
 
-local nvm_dir = os.getenv("NVM_DIR")
-if not nvm_dir or nvm_dir == "" then
-	return disabled("NVM_DIR not set")
+-- Locate the global node_modules directory in a way that works regardless of how
+-- node was installed (Homebrew, nvm, fnm, volta, asdf, system). `npm root -g` is
+-- the canonical, manager-agnostic answer, so we never have to hardcode a layout.
+local function global_node_modules()
+	if vim.fn.executable("npm") == 0 then
+		return nil, "npm not found on PATH"
+	end
+	local out = vim.fn.system({ "npm", "root", "-g" })
+	if vim.v.shell_error ~= 0 then
+		return nil, "`npm root -g` failed"
+	end
+	local dir = vim.trim(out)
+	if dir == "" or vim.fn.isdirectory(dir) == 0 then
+		return nil, "global node_modules not found: " .. dir
+	end
+	return dir
 end
 
-local node_version = vim.fn.system("node -v"):gsub("%s+$", "")
-if not node_version or node_version == "" then
-	return disabled("no active node version")
+local node_modules, err = global_node_modules()
+if not node_modules then
+	return disabled(err)
 end
 
-local node_modules_path = vim.fn.expand(
-	nvm_dir .. "/versions/node/" .. node_version .. "/lib/node_modules")
-local ts_lib_path = node_modules_path .. "/typescript/lib"
-local angular_language_server_path = node_modules_path .. "/@angular/language-server"
+local ts_lib_path = node_modules .. "/typescript/lib"
+local angular_ls_path = node_modules .. "/@angular/language-server"
+
+if vim.fn.executable("ngserver") == 0 then
+	return disabled("ngserver not on PATH — run: npm install -g @angular/language-server")
+end
 
 if vim.fn.isdirectory(ts_lib_path) == 0 then
-	return disabled("typescript lib path missing: " .. ts_lib_path)
+	return disabled("typescript lib missing: " .. ts_lib_path .. " — run: npm install -g typescript")
 end
 
-if vim.fn.isdirectory(angular_language_server_path) == 0 then
-	return disabled("@angular/language-server missing: " ..
-		angular_language_server_path)
+if vim.fn.isdirectory(angular_ls_path) == 0 then
+	return disabled("@angular/language-server missing — run: npm install -g @angular/language-server")
 end
 
 return {
@@ -40,7 +54,7 @@ return {
 		"--tsProbeLocations",
 		ts_lib_path,
 		"--ngProbeLocations",
-		angular_language_server_path,
+		angular_ls_path,
 	},
 	filetypes = { "html", "htmlangular" },
 	root_markers = { "angular.json", "project.json" },

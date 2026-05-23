@@ -2,7 +2,9 @@ local vim = vim
 
 -- General keybindings
 vim.keymap.set("n", "<C-q>", function()
-	pcall(function() require("session").save() end)
+	pcall(function()
+		require("session").save()
+	end)
 	vim.cmd("qa!")
 end)
 
@@ -20,20 +22,26 @@ local M = {
 		binds = {
 			-- Native Neovim commenting (gcc / gc) re-bound to <leader>/.
 			-- Needs remap=true because gcc / gc are themselves mappings.
-			toggle_line   = { key = "<leader>/", mode = "n", cmd = "gcc", remap = true, desc = "Toggle comment (line)" },
-			toggle_visual = { key = "<leader>/", mode = "v", cmd = "gc",  remap = true, desc = "Toggle comment (selection)" },
+			toggle_line = { key = "<leader>/", mode = "n", cmd = "gcc", remap = true, desc = "Toggle comment (line)" },
+			toggle_visual = {
+				key = "<leader>/",
+				mode = "v",
+				cmd = "gc",
+				remap = true,
+				desc = "Toggle comment (selection)",
+			},
 		},
 	},
 	terminal = {
 		binds = {
 			focus = {},
-			toggle = {}
-		}
+			toggle = {},
+		},
 	},
 	lsp = {
 		inlay_hint = {
 			key = "<leader>uh",
-			mode = { "n" }
+			mode = { "n" },
 		},
 		binds = {
 			-- definition = {
@@ -65,7 +73,7 @@ local M = {
 						max_height = 20,
 					})
 				end,
-				mode = { "n" }
+				mode = { "n" },
 			},
 			signature_help = {
 				key = "<C-k>",
@@ -76,24 +84,24 @@ local M = {
 						max_height = 20,
 					})
 				end,
-				mode = { "n" }
+				mode = { "n" },
 			},
 			code_action = {
 				key = "<C-.>",
 				cmd = vim.lsp.buf.code_action,
-				mode = { "n" }
+				mode = { "n" },
 			},
 			goto_prev = {
 				key = "[d",
 				cmd = vim.diagnostic.goto_prev,
-				mode = { "n" }
+				mode = { "n" },
 			},
 			goto_next = {
 				key = "]d",
 				cmd = vim.diagnostic.goto_next,
-				mode = { "n" }
+				mode = { "n" },
 			},
-		}
+		},
 	},
 	snacks = {
 		binds = {
@@ -102,234 +110,252 @@ local M = {
 				key = "<leader>e",
 				cmd = function()
 					local sc = require("sourcecontrol")
-					if sc.is_open() then sc.close() end
-					local explorer = Snacks.picker.get({ source = "explorer" })
-						[1]
+					if sc.is_open() then
+						sc.close()
+					end
+					local explorer = Snacks.picker.get({ source = "explorer" })[1]
 					if explorer then
 						explorer:focus()
 					else
 						Snacks.explorer.open()
 					end
-					vim.schedule(function() sc.apply_selector() end)
+					vim.schedule(function()
+						sc.apply_selector()
+					end)
 				end,
 				mode = { "n", "v" },
-				desc = "Open/focus File Explorer"
+				desc = "Open/focus File Explorer",
 			},
 			explorerToggle = {
 				key = "<leader>E",
 				cmd = function()
 					local sc = require("sourcecontrol")
-					if sc.is_open() then sc.close() end
+					if sc.is_open() then
+						sc.close()
+					end
 					Snacks.explorer()
-					vim.schedule(function() sc.apply_selector() end)
+					vim.schedule(function()
+						sc.apply_selector()
+					end)
 				end,
 				mode = { "n", "v" },
-				desc = "Toggle File Explorer"
-			}, -- Notifications
+				desc = "Toggle File Explorer",
+			},
+			-- Notifications
 			notifications = {
 				key = "<leader>n",
 				cmd = function()
-					Snacks.picker
-						.notifications()
+					Snacks.picker.notifications()
 				end,
 				mode = { "n", "v" },
-				desc = "Notification History"
+				desc = "Notification History",
 			},
-
 			-- Find
 			find_files = {
 				key = "<leader>ff",
 				cmd = function()
-					Snacks.picker
-						.files()
+					Snacks.picker.files()
 				end,
-				desc = "Find Files"
+				desc = "Find Files",
 			},
 			grep = {
 				key = "<leader><space>",
 				cmd = function()
-					Snacks.picker
-						.grep()
+					Snacks.picker.grep()
 				end,
-				desc = "Grep"
+				desc = "Grep",
 			},
 			lsp_defs = {
 				key = "gd",
-				cmd = function() Snacks.picker.lsp_definitions() end,
-				desc = "Goto Definition"
+				cmd = function()
+					Snacks.picker.lsp_definitions()
+				end,
+				desc = "Goto Definition",
 			},
 			lsp_decs = {
 				key = "gD",
-				cmd = function() Snacks.picker.lsp_declarations() end,
-				desc = "Goto Declaration"
+				cmd = function()
+					Snacks.picker.lsp_declarations()
+				end,
+				desc = "Goto Declaration",
 			},
 			lsp_refs = {
 				key = "gr",
 				cmd = function()
-					Snacks.picker
-						.lsp_references()
+					Snacks.picker.lsp_references()
 				end,
 				nowait = true,
-				desc = "LSP References"
+				desc = "LSP References",
 			},
 			lsp_impls = {
 				key = "gi",
-				cmd = function() Snacks.picker.lsp_implementations() end,
-				desc = "Goto Implementation"
+				cmd = function()
+					Snacks.picker.lsp_implementations()
+				end,
+				desc = "Goto Implementation",
 			},
 			git_diff = {
 				key = "<leader>fd",
 				cmd = function()
-					Snacks.picker
-						.git_diff()
+					Snacks.picker.git_diff()
 				end,
-				desc = "Git Diff (Hunks)"
+				desc = "Git Diff (Hunks)",
 			},
 			grep_word = {
 				key = "<leader>fw",
 				cmd = function()
-					Snacks.picker
-						.grep_word()
+					Snacks.picker.grep_word()
 				end,
 				desc = "Visual selection or word",
-				mode = { "n", "x" }
+				mode = { "n", "x" },
 			},
 
 			-- Git
-			lazygit = { key = "<leader>gg", cmd = function() Snacks.lazygit() end, desc = "Lazygit" },
+			lazygit = {
+				key = "<leader>gg",
+				cmd = function()
+					Snacks.lazygit()
+				end,
+				desc = "Lazygit",
+			},
 			git_branches = {
 				key = "<leader>gb",
 				cmd = function()
-					Snacks.picker
-						.git_branches()
+					Snacks.picker.git_branches()
 				end,
-				desc = "Git Branches"
+				desc = "Git Branches",
 			},
 			git_log = {
 				key = "<leader>gl",
 				cmd = function()
-					Snacks.picker
-						.git_log()
+					Snacks.picker.git_log()
 				end,
-				desc = "Git Log"
+				desc = "Git Log",
 			},
 			git_log_line = {
 				key = "<leader>gL",
 				cmd = function()
-					Snacks.picker
-						.git_log_line()
+					Snacks.picker.git_log_line()
 				end,
-				desc = "Git Log Line"
+				desc = "Git Log Line",
 			},
 			git_status = {
 				key = "<leader>gs",
 				cmd = function()
-					Snacks.picker
-						.git_status()
+					Snacks.picker.git_status()
 				end,
-				desc = "Git Status"
+				desc = "Git Status",
 			},
 			git_stash = {
 				key = "<leader>gS",
 				cmd = function()
-					Snacks.picker
-						.git_stash()
+					Snacks.picker.git_stash()
 				end,
-				desc = "Git Stash"
+				desc = "Git Stash",
 			},
 			git_log_file = {
 				key = "<leader>gf",
 				cmd = function()
-					Snacks.picker
-						.git_log_file()
+					Snacks.picker.git_log_file()
 				end,
-				desc = "Git Log File"
+				desc = "Git Log File",
 			},
 
 			-- Search
 			registers = {
 				key = "<leader>hr",
 				cmd = function()
-					Snacks.picker
-						.registers()
+					Snacks.picker.registers()
 				end,
-				desc = "Registers"
+				desc = "Registers",
 			},
 			search_history = {
 				key = "<leader>hs",
 				cmd = function()
-					Snacks
-						.picker.search_history()
+					Snacks.picker.search_history()
 				end,
-				desc = "Search History"
+				desc = "Search History",
 			},
-			undo = { key = "<leader>hu", cmd = function() Snacks.picker.undo() end, desc = "Undo History" },
+			undo = {
+				key = "<leader>hu",
+				cmd = function()
+					Snacks.picker.undo()
+				end,
+				desc = "Undo History",
+			},
 			autocmds = {
 				key = "<leader>sa",
 				cmd = function()
-					Snacks.picker
-						.autocmds()
+					Snacks.picker.autocmds()
 				end,
-				desc = "Autocmds"
+				desc = "Autocmds",
 			},
 			commands = {
 				key = "<leader>sC",
 				cmd = function()
-					Snacks.picker
-						.commands()
+					Snacks.picker.commands()
 				end,
-				desc = "Commands"
+				desc = "Commands",
 			},
 			diagnostics = {
 				key = "<leader>sd",
 				cmd = function()
-					Snacks.picker
-						.diagnostics()
+					Snacks.picker.diagnostics()
 				end,
-				desc = "Diagnostics"
+				desc = "Diagnostics",
 			},
 			diagnostics_buffer = {
 				key = "<leader>sD",
 				cmd = function()
-					Snacks
-						.picker.diagnostics_buffer()
+					Snacks.picker.diagnostics_buffer()
 				end,
-				desc = "Buffer Diagnostics"
+				desc = "Buffer Diagnostics",
 			},
 			highlights = {
 				key = "<leader>sh",
 				cmd = function()
-					Snacks.picker
-						.highlights()
+					Snacks.picker.highlights()
 				end,
-				desc = "Highlights"
+				desc = "Highlights",
 			},
 
 			-- Nice to haves
 			keymaps = {
 				key = "<leader>sk",
 				cmd = function()
-					Snacks.picker
-						.keymaps()
+					Snacks.picker.keymaps()
 				end,
-				desc = "Keymaps"
+				desc = "Keymaps",
 			},
-			gitbrowse = { key = "<leader>gB", cmd = function() Snacks.gitbrowse() end, desc = "Git Browse", mode = { "n", "v" } },
+			gitbrowse = {
+				key = "<leader>gB",
+				cmd = function()
+					Snacks.gitbrowse()
+				end,
+				desc = "Git Browse",
+				mode = { "n", "v" },
+			},
 		},
 		toggles = {
-			{ option = "spell",          name = "Spelling",        key = "<leader>us" },
-			{ option = "wrap",           name = "Wrap",            key = "<leader>uw" },
+			{ option = "spell", name = "Spelling", key = "<leader>us" },
+			{ option = "wrap", name = "Wrap", key = "<leader>uw" },
 			{ option = "relativenumber", name = "Relative Number", key = "<leader>uL" },
-			{ method = "diagnostics",    key = "<leader>ud" },
-			{ method = "line_number",    key = "<leader>ul" },
-			{ method = "indent",         key = "<leader>ug" },
-			{ method = "dim",            key = "<leader>uD" },
-			{ method = "treesitter",     key = "<leader>uT" },
+			{ method = "diagnostics", key = "<leader>ud" },
+			{ method = "line_number", key = "<leader>ul" },
+			{ method = "indent", key = "<leader>ug" },
+			{ method = "dim", key = "<leader>uD" },
+			{ method = "treesitter", key = "<leader>uT" },
 		},
 	},
 	minimap = {
 		binds = {
-			toggle = { key = "<leader>m", cmd = function() MiniMap.toggle() end, desc = "Toggle minimap" },
+			toggle = {
+				key = "<leader>m",
+				cmd = function()
+					MiniMap.toggle()
+				end,
+				desc = "Toggle minimap",
+			},
 		},
 	},
 	bufferline = {
@@ -347,16 +373,38 @@ local M = {
 			model = { key = "<leader>vm", cmd = "<cmd>ClaudeCodeSelectModel<cr>", desc = "Select Claude model" },
 			add_buffer = { key = "<leader>vb", cmd = "<cmd>ClaudeCodeAdd %<cr>", desc = "Add current buffer" },
 			send = { key = "<leader>vs", cmd = "<cmd>ClaudeCodeSend<cr>", mode = "v", desc = "Send to Claude" },
-			add_tree = { key = "<leader>vB", cmd = "<cmd>ClaudeCodeTreeAdd<cr>", desc = "Add file", ft = { "NvimTree", "neo-tree", "oil", "minifiles", "netrw" } },
+			add_tree = {
+				key = "<leader>vB",
+				cmd = "<cmd>ClaudeCodeTreeAdd<cr>",
+				desc = "Add file",
+				ft = { "NvimTree", "neo-tree", "oil", "minifiles", "netrw" },
+			},
 			diff_accept = { key = "<leader>vv", cmd = "<cmd>ClaudeCodeDiffAccept<cr>", desc = "Accept diff" },
 			diff_deny = { key = "<leader>vd", cmd = "<cmd>ClaudeCodeDiffDeny<cr>", desc = "Deny diff" },
 		},
 	},
 	copilot = {
 		binds = {
-			accept = { key = "<C-l>", cmd = 'copilot#Accept("\\<CR>")', mode = "i", desc = "Accept Copilot suggestion", expr = true, replace_keycodes = false },
-			accept_word = { key = "<M-l>", cmd = "<Plug>(copilot-accept-word)", mode = "i", desc = "Accept Copilot word" },
-			dismiss = { key = "<C-]>", cmd = "<Plug>(copilot-dismiss)", mode = "i", desc = "Dismiss Copilot suggestion" },
+			accept = {
+				key = "<C-l>",
+				cmd = 'copilot#Accept("\\<CR>")',
+				mode = "i",
+				desc = "Accept Copilot suggestion",
+				expr = true,
+				replace_keycodes = false,
+			},
+			accept_word = {
+				key = "<M-l>",
+				cmd = "<Plug>(copilot-accept-word)",
+				mode = "i",
+				desc = "Accept Copilot word",
+			},
+			dismiss = {
+				key = "<C-]>",
+				cmd = "<Plug>(copilot-dismiss)",
+				mode = "i",
+				desc = "Dismiss Copilot suggestion",
+			},
 			next = { key = "<M-n>", cmd = "<Plug>(copilot-next)", mode = "i", desc = "Next Copilot suggestion" },
 			prev = { key = "<M-p>", cmd = "<Plug>(copilot-prev)", mode = "i", desc = "Prev Copilot suggestion" },
 		},
@@ -365,18 +413,37 @@ local M = {
 		binds = {
 			toggle = { key = "<leader>cc", cmd = "<cmd>CopilotChatToggle<cr>", desc = "Toggle Copilot Chat" },
 			models = { key = "<leader>cm", cmd = "<cmd>CopilotChatModels<cr>", desc = "Select Copilot Model" },
-			explain = { key = "<leader>ce", cmd = "<cmd>CopilotChatExplain<cr>", mode = { "n", "v" }, desc = "Copilot Explain" },
+			explain = {
+				key = "<leader>ce",
+				cmd = "<cmd>CopilotChatExplain<cr>",
+				mode = { "n", "v" },
+				desc = "Copilot Explain",
+			},
 			fix = { key = "<leader>cf", cmd = "<cmd>CopilotChatFix<cr>", mode = { "n", "v" }, desc = "Copilot Fix" },
-			optimize = { key = "<leader>co", cmd = "<cmd>CopilotChatOptimize<cr>", mode = { "n", "v" }, desc = "Copilot Optimize" },
-			review = { key = "<leader>cr", cmd = "<cmd>CopilotChatReview<cr>", mode = { "n", "v" }, desc = "Copilot Review" },
-			tests = { key = "<leader>ct", cmd = "<cmd>CopilotChatTests<cr>", mode = { "n", "v" }, desc = "Copilot Tests" },
+			optimize = {
+				key = "<leader>co",
+				cmd = "<cmd>CopilotChatOptimize<cr>",
+				mode = { "n", "v" },
+				desc = "Copilot Optimize",
+			},
+			review = {
+				key = "<leader>cr",
+				cmd = "<cmd>CopilotChatReview<cr>",
+				mode = { "n", "v" },
+				desc = "Copilot Review",
+			},
+			tests = {
+				key = "<leader>ct",
+				cmd = "<cmd>CopilotChatTests<cr>",
+				mode = { "n", "v" },
+				desc = "Copilot Tests",
+			},
 			quick = {
 				key = "<leader>cq",
 				cmd = function()
 					local input = vim.fn.input("Quick Chat: ")
 					if input ~= "" then
-						require("CopilotChat").ask(input,
-							{ selection = require("CopilotChat.select").buffer })
+						require("CopilotChat").ask(input, { selection = require("CopilotChat.select").buffer })
 					end
 				end,
 				desc = "Copilot Quick Chat",
@@ -388,7 +455,9 @@ local M = {
 --- Apply a plugin's .binds table directly via vim.keymap.set.
 function M.apply(plugin_name)
 	local plugin = M[plugin_name]
-	if not plugin or not plugin.binds then return end
+	if not plugin or not plugin.binds then
+		return
+	end
 	for _, bind in pairs(plugin.binds) do
 		vim.keymap.set(bind.mode or "n", bind.key, bind.cmd, {
 			desc = bind.desc,
@@ -403,9 +472,7 @@ end
 
 -- Smart buffer close: navigate away cleanly, fall back to dashboard
 local function is_regular_buf(bufnr)
-	return bufnr and bufnr > 0
-		and vim.api.nvim_buf_is_valid(bufnr)
-		and vim.bo[bufnr].buftype == ""
+	return bufnr and bufnr > 0 and vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].buftype == ""
 end
 
 local function pick_replacement(exclude_buf)
@@ -415,24 +482,29 @@ local function pick_replacement(exclude_buf)
 			table.insert(bufs, b)
 		end
 	end
-	if #bufs == 0 then return nil end
+	if #bufs == 0 then
+		return nil
+	end
 	table.sort(bufs)
 
 	-- Prefer the nearest buffer to the left (lower ID), else go right
 	local prev = nil
 	for _, b in ipairs(bufs) do
-		if b < exclude_buf then prev = b end
+		if b < exclude_buf then
+			prev = b
+		end
 	end
 	return prev or bufs[1]
 end
 
 local function smart_close_buf(bufnr)
 	bufnr = bufnr or vim.api.nvim_get_current_buf()
-	if not vim.api.nvim_buf_is_valid(bufnr) then return end
+	if not vim.api.nvim_buf_is_valid(bufnr) then
+		return
+	end
 
 	if vim.bo[bufnr].buftype == "terminal" then
-		vim.notify("Use terminal keymaps to close terminal buffers",
-			vim.log.levels.INFO)
+		vim.notify("Use terminal keymaps to close terminal buffers", vim.log.levels.INFO)
 		return
 	end
 
@@ -447,15 +519,15 @@ local function smart_close_buf(bufnr)
 			if replacement then
 				vim.api.nvim_win_set_buf(win, replacement)
 			else
-				vim.api.nvim_win_call(win, function() vim.cmd("enew") end)
+				vim.api.nvim_win_call(win, function()
+					vim.cmd("enew")
+				end)
 			end
 		end
 	end
 
 	pcall(vim.api.nvim_buf_delete, bufnr, { force = false })
 end
-
-
 
 -- Expose for bufferline's close_command
 _G.SmartCloseBuf = smart_close_buf
